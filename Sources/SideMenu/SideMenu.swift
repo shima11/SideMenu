@@ -19,6 +19,16 @@ public enum MenuDragActivation: Equatable, Hashable, Sendable {
   case full
 }
 
+/// Controls how the menu drag gesture competes with other gestures.
+public enum MenuGestureHandling: Equatable, Hashable, Sendable {
+  /// Allow other gestures (like sliders) to recognize alongside the menu drag.
+  case simultaneous
+  /// Prefer the menu drag gesture when it recognizes.
+  case highPriority
+  /// Let the menu drag gesture take exclusive control.
+  case exclusive
+}
+
 /// Specifies which edge the menu appears from.
 public enum MenuEdge: Equatable, Hashable, Sendable {
   /// Menu appears from the leading edge (left in LTR, right in RTL).
@@ -97,6 +107,11 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   /// Negative values are clamped to 0. Default is 50.0 points.
   public var openCloseThreshold: CGFloat
 
+  /// How the menu drag gesture competes with other gestures like sliders.
+  ///
+  /// Default is `.simultaneous`.
+  public var gestureHandling: MenuGestureHandling
+
   /// Whether haptic feedback is triggered when opening or closing the menu via gesture.
   ///
   /// Default is `true`.
@@ -122,6 +137,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - dragEdgeWidth: Width of edge drag area in points. Default is 24.0.
   ///   - dragStartThreshold: Minimum drag distance to start in points. Default is 6.0.
   ///   - openCloseThreshold: Minimum drag distance to open/close in points. Default is 50.0.
+  ///   - gestureHandling: How the menu drag gesture competes with other gestures. Default is `.simultaneous`.
   ///   - enableHaptics: Whether to enable haptic feedback. Default is `true`.
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
   public init(
@@ -135,6 +151,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     dragEdgeWidth: CGFloat = 24,
     dragStartThreshold: CGFloat = 6,
     openCloseThreshold: CGFloat = 50,
+    gestureHandling: MenuGestureHandling = .simultaneous,
     enableHaptics: Bool = true,
     edge: MenuEdge = .leading
   ) {
@@ -148,6 +165,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     self.dragEdgeWidth = max(dragEdgeWidth, 0)
     self.dragStartThreshold = max(dragStartThreshold, 0)
     self.openCloseThreshold = max(openCloseThreshold, 0)
+    self.gestureHandling = gestureHandling
     self.enableHaptics = enableHaptics
     self.edge = edge
   }
@@ -236,6 +254,75 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     return GeometryReader { proxy in
       let screenWidth = max(proxy.size.width, 1)
       let menuWidthPoints = screenWidth * configuration.menuWidth
+      let dragGesture = DragGesture()
+        .onChanged { value in
+          let horizontal = abs(value.translation.width)
+          let vertical = abs(value.translation.height)
+          let isEdgeOnly = configuration.dragActivation == .edge
+          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > configuration.dragEdgeWidth
+
+          if isOpeningFromEdge {
+            if isMenuDragging {
+              isMenuDragging = false
+            }
+            return
+          }
+          guard horizontal > vertical else {
+            if isMenuDragging {
+              isMenuDragging = false
+            }
+            return
+          }
+          guard horizontal <= menuWidthPoints else { return }
+          guard !(model.currentState == .closed && value.translation.width < 0) else { return }
+          if horizontal > configuration.dragStartThreshold && !isMenuDragging {
+            isMenuDragging = true
+          }
+          if model.currentState == .open && value.translation.width > 0 {
+            withTransaction(Transaction(animation: nil)) {
+              model.setDragOffset(SideMenuState.edgeBounceResistance)
+            }
+            return
+          }
+          withTransaction(Transaction(animation: nil)) {
+            model.setDragOffset(Float(value.translation.width))
+          }
+        }
+        .onEnded { value in
+          let isEdgeOnly = configuration.dragActivation == .edge
+          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > configuration.dragEdgeWidth
+          if isOpeningFromEdge {
+            if isMenuDragging {
+              isMenuDragging = false
+            }
+            withTransaction(Transaction(animation: configuration.menuAnimation)) {
+              model.resetDragOffset()
+            }
+            return
+          }
+          if isMenuDragging {
+            isMenuDragging = false
+          }
+          let shouldClose = value.translation.width < -configuration.openCloseThreshold
+          let shouldOpen = value.translation.width > configuration.openCloseThreshold
+          let startingState = model.currentState
+
+          withTransaction(Transaction(animation: configuration.menuAnimation)) {
+            model.resetDragOffset()
+            if shouldClose {
+              model.close()
+            }
+            if shouldOpen {
+              model.open()
+            }
+          }
+
+          let didClose = startingState == .open && shouldClose
+          let didOpen = startingState == .closed && shouldOpen
+          if (didClose || didOpen) && configuration.enableHaptics {
+            hapticGenerator?.impactOccurred()
+          }
+        }
 
       // Calculate offset (currently only supports leading edge)
       let baseOffset = -(menuWidthPoints * CGFloat(model.currentState == .open ? 0 : 1))
@@ -300,73 +387,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .simultaneousGesture(DragGesture()
-      .onChanged { value in
-        let horizontal = abs(value.translation.width)
-        let vertical = abs(value.translation.height)
-        let isEdgeOnly = configuration.dragActivation == .edge
-        let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > configuration.dragEdgeWidth
-
-        if isOpeningFromEdge {
-          if isMenuDragging {
-            isMenuDragging = false
-          }
-          return
-        }
-        guard horizontal > vertical else {
-          if isMenuDragging {
-            isMenuDragging = false
-          }
-          return
-        }
-        guard horizontal <= menuWidthPoints else { return }
-        guard !(model.currentState == .closed && value.translation.width < 0) else { return }
-        if horizontal > configuration.dragStartThreshold && !isMenuDragging {
-          isMenuDragging = true
-        }
-        if model.currentState == .open && value.translation.width > 0 {
-          withTransaction(Transaction(animation: nil)) {
-            model.setDragOffset(SideMenuState.edgeBounceResistance)
-          }
-          return
-        }
-        withTransaction(Transaction(animation: nil)) {
-          model.setDragOffset(Float(value.translation.width))
-        }
-      }
-      .onEnded { value in
-        let isEdgeOnly = configuration.dragActivation == .edge
-        let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > configuration.dragEdgeWidth
-        if isOpeningFromEdge {
-          if isMenuDragging {
-            isMenuDragging = false
-          }
-          withTransaction(Transaction(animation: configuration.menuAnimation)) {
-            model.resetDragOffset()
-          }
-          return
-        }
-        if isMenuDragging {
-          isMenuDragging = false
-        }
-        let shouldClose = value.translation.width < -configuration.openCloseThreshold
-        let shouldOpen = value.translation.width > configuration.openCloseThreshold
-
-        withTransaction(Transaction(animation: configuration.menuAnimation)) {
-          model.resetDragOffset()
-          if shouldClose {
-            model.close()
-          }
-          if shouldOpen {
-            model.open()
-          }
-        }
-
-        if (shouldClose || shouldOpen) && configuration.enableHaptics {
-          hapticGenerator?.impactOccurred()
-        }
-      }
-    )
+      .modifier(MenuGestureModifier(gesture: dragGesture, handling: configuration.gestureHandling))
     .accessibilityAction(.escape) {
       guard isMenuOpen else { return }
       withAnimation(configuration.menuAnimation) {
@@ -391,6 +412,22 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     .onDisappear {
       hapticGenerator = nil
     }
+    }
+  }
+}
+
+private struct MenuGestureModifier<G: Gesture>: ViewModifier {
+  let gesture: G
+  let handling: MenuGestureHandling
+
+  func body(content: Content) -> some View {
+    switch handling {
+    case .simultaneous:
+      content.simultaneousGesture(gesture)
+    case .highPriority:
+      content.highPriorityGesture(gesture)
+    case .exclusive:
+      content.gesture(gesture)
     }
   }
 }
@@ -448,6 +485,7 @@ private struct SideMenuPreview: View {
         dragEdgeWidth: configuration.dragEdgeWidth,
         dragStartThreshold: configuration.dragStartThreshold,
         openCloseThreshold: configuration.openCloseThreshold,
+        gestureHandling: configuration.gestureHandling,
         enableHaptics: configuration.enableHaptics
       )
     ) {
@@ -472,6 +510,11 @@ private struct SideMenuPreview: View {
               Picker("Drag", selection: $configuration.dragActivation) {
                 Text("Full").tag(MenuDragActivation.full)
                 Text("Edge").tag(MenuDragActivation.edge)
+              }
+              Picker("Gesture", selection: $configuration.gestureHandling) {
+                Text("Simultaneous").tag(MenuGestureHandling.simultaneous)
+                Text("Priority").tag(MenuGestureHandling.highPriority)
+                Text("Exclusive").tag(MenuGestureHandling.exclusive)
               }
               PreviewValueSlider(
                 title: "Edge Width",

@@ -52,6 +52,12 @@ struct ContentView: View {
               Text("Full Screen").tag(MenuDragActivation.full)
               Text("Edge Only").tag(MenuDragActivation.edge)
             }
+
+            Picker("Gesture Handling", selection: $configuration.gestureHandling) {
+              Text("Simultaneous").tag(MenuGestureHandling.simultaneous)
+              Text("Priority").tag(MenuGestureHandling.highPriority)
+              Text("Exclusive").tag(MenuGestureHandling.exclusive)
+            }
             
             Toggle("Haptic Feedback", isOn: $configuration.enableHaptics)
             
