@@ -243,25 +243,25 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
       HStack (spacing: 0) {
         if configuration.menuStyle == .slideInOver {
-            ZStack {
-              mainView
-                .blur(radius: model.calculateBlur(maxValue: configuration.blur, totalWidth: screenWidth))
-                .scaleEffect(model.calculateScale(minScale: configuration.scale, totalWidth: screenWidth))
-                .frame(width: screenWidth)
-                .disabled(isMenuDragging)
-                .allowsHitTesting(!isMenuDragging)
-                .accessibilityFocused($focusTarget, equals: .main)
-                .accessibilityHidden(isMenuOpen)
+          ZStack(alignment: .leading) {
+            mainView
+              .blur(radius: model.calculateBlur(maxValue: configuration.blur, totalWidth: screenWidth))
+              .scaleEffect(model.calculateScale(minScale: configuration.scale, totalWidth: screenWidth))
+              .frame(width: screenWidth)
+              .disabled(isMenuDragging)
+              .allowsHitTesting(!isMenuDragging)
+              .accessibilityFocused($focusTarget, equals: .main)
+              .accessibilityHidden(isMenuOpen)
 
-              Color.clear
-                .frame(maxWidth: .infinity,  maxHeight: .infinity)
-                .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: configuration.dimValue, totalWidth: screenWidth))))
-                .allowsHitTesting(isMenuOpen)
-            .onTapGesture {
-              if model.isOpen {
-                withAnimation(configuration.menuAnimation) { model.close() }
+            Color.clear
+              .frame(maxWidth: .infinity,  maxHeight: .infinity)
+              .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: configuration.dimValue, totalWidth: screenWidth))))
+              .allowsHitTesting(isMenuOpen)
+              .onTapGesture {
+                if model.isOpen {
+                  withAnimation(configuration.menuAnimation) { model.close() }
+                }
               }
-            }
 
             sideMenu
               .frame(width: menuWidthPoints)
@@ -269,9 +269,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
               .accessibilityFocused($focusTarget, equals: .menu)
               .accessibilityHidden(!isMenuOpen)
               .accessibilityAddTraits(isMenuOpen ? .isModal : [])
-            }
+          }
 
-          } else {
+        } else {
             sideMenu
               .frame(width: menuWidthPoints)
               .offset(x: calcOffset, y: 0)
