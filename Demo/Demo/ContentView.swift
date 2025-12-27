@@ -13,6 +13,11 @@ struct ContentView: View {
   @State private var scale: Double = 1
   @State private var dimValue: Double = 0.2
 
+  // Drag activation parameters
+  @State private var edgeWidth: Double = 24
+  @State private var startThreshold: Double = 6
+  @State private var openCloseThreshold: Double = 50
+
   private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
 
   private var menuStyle: MenuStyle {
@@ -24,6 +29,15 @@ struct ContentView: View {
     }
   }
 
+  private var dragActivation: MenuDragActivation {
+    switch configuration.dragActivation {
+    case .edge:
+      return .edge(edgeWidth: edgeWidth, startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
+    case .full:
+      return .full(startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
+    }
+  }
+
   var body: some View {
     SideMenuView(
       model: menuState,
@@ -31,10 +45,7 @@ struct ContentView: View {
         menuWidth: configuration.menuWidth,
         menuStyle: menuStyle,
         menuAnimation: configuration.menuAnimation,
-        dragActivation: configuration.dragActivation,
-        dragEdgeWidth: configuration.dragEdgeWidth,
-        dragStartThreshold: configuration.dragStartThreshold,
-        openCloseThreshold: configuration.openCloseThreshold,
+        dragActivation: dragActivation,
         gestureHandling: configuration.gestureHandling,
         hapticStyle: configuration.hapticStyle
       )
@@ -83,8 +94,19 @@ struct ContentView: View {
             }
 
             Picker("Drag Activation", selection: $configuration.dragActivation) {
-              Text("Full Screen").tag(MenuDragActivation.full)
-              Text("Edge Only").tag(MenuDragActivation.edge)
+              Text("Full Screen").tag(MenuDragActivation.full())
+              Text("Edge Only").tag(MenuDragActivation.edge())
+            }
+            .onChange(of: configuration.dragActivation) { _, newValue in
+              switch newValue {
+              case .edge(let defaultEdgeWidth, let defaultStartThreshold, let defaultOpenCloseThreshold):
+                edgeWidth = defaultEdgeWidth
+                startThreshold = defaultStartThreshold
+                openCloseThreshold = defaultOpenCloseThreshold
+              case .full(let defaultStartThreshold, let defaultOpenCloseThreshold):
+                startThreshold = defaultStartThreshold
+                openCloseThreshold = defaultOpenCloseThreshold
+              }
             }
 
             Picker("Gesture Handling", selection: $configuration.gestureHandling) {

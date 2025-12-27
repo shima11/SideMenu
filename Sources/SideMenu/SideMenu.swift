@@ -20,10 +20,18 @@ public enum MenuStyle: Equatable, Hashable, Sendable {
 
 /// Defines which area of the screen can initiate a drag gesture to open the menu.
 public enum MenuDragActivation: Equatable, Hashable, Sendable {
-  /// Only drags starting from the screen edge (within `dragEdgeWidth`) can open the menu.
-  case edge
+  /// Only drags starting from the screen edge can open the menu.
+  /// - Parameters:
+  ///   - edgeWidth: Width of the edge area in points (default: 24)
+  ///   - startThreshold: Minimum drag distance to start in points (default: 6)
+  ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
+  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 6, openCloseThreshold: CGFloat = 50)
+
   /// Drags starting anywhere on the screen can open the menu.
-  case full
+  /// - Parameters:
+  ///   - startThreshold: Minimum drag distance to start in points (default: 6)
+  ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
+  case full(startThreshold: CGFloat = 6, openCloseThreshold: CGFloat = 50)
 }
 
 /// Controls how the menu drag gesture competes with other gestures.
@@ -80,23 +88,8 @@ public struct SideMenuConfiguration: Equatable, Sendable {
 
   /// Controls which screen area can initiate a drag to open the menu.
   ///
-  /// Default is `.full`.
+  /// Default is `.full()`.
   public var dragActivation: MenuDragActivation
-
-  /// Width of the edge area (in points) that responds to drag gestures when `dragActivation` is `.edge`.
-  ///
-  /// Negative values are clamped to 0. Default is 24.0 points.
-  public var dragEdgeWidth: CGFloat
-
-  /// Minimum horizontal drag distance (in points) before the gesture is recognized as a menu drag.
-  ///
-  /// Negative values are clamped to 0. Default is 6.0 points.
-  public var dragStartThreshold: CGFloat
-
-  /// Minimum drag distance (in points) required to open or close the menu when the gesture ends.
-  ///
-  /// Negative values are clamped to 0. Default is 50.0 points.
-  public var openCloseThreshold: CGFloat
 
   /// How the menu drag gesture competes with other gestures like sliders.
   ///
@@ -121,10 +114,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - menuWidth: Width of the menu as a fraction of screen width (0.0 to 1.0). Default is 0.8.
   ///   - menuStyle: Visual presentation style. Default is `.slideInOut()`.
   ///   - menuAnimation: Animation curve for transitions. Default is `.snappy(duration: 0.35, extraBounce: 0.1)`.
-  ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full`.
-  ///   - dragEdgeWidth: Width of edge drag area in points. Default is 24.0.
-  ///   - dragStartThreshold: Minimum drag distance to start in points. Default is 6.0.
-  ///   - openCloseThreshold: Minimum drag distance to open/close in points. Default is 50.0.
+  ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full()`.
   ///   - gestureHandling: How the menu drag gesture competes with other gestures. Default is `.simultaneous`.
   ///   - hapticStyle: The style of impact haptic feedback. Set to `nil` to disable. Default is `.medium`.
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
@@ -132,10 +122,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     menuWidth: CGFloat = 0.8,
     menuStyle: MenuStyle = .slideInOut(),
     menuAnimation: Animation = .easeInOut,
-    dragActivation: MenuDragActivation = .full,
-    dragEdgeWidth: CGFloat = 24,
-    dragStartThreshold: CGFloat = 6,
-    openCloseThreshold: CGFloat = 50,
+    dragActivation: MenuDragActivation = .full(),
     gestureHandling: MenuGestureHandling = .simultaneous,
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
     edge: MenuEdge = .leading
@@ -144,9 +131,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     self.menuStyle = menuStyle
     self.menuAnimation = menuAnimation
     self.dragActivation = dragActivation
-    self.dragEdgeWidth = max(dragEdgeWidth, 0)
-    self.dragStartThreshold = max(dragStartThreshold, 0)
-    self.openCloseThreshold = max(openCloseThreshold, 0)
     self.gestureHandling = gestureHandling
     self.hapticStyle = hapticStyle
     self.edge = edge
@@ -236,12 +220,23 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     return GeometryReader { proxy in
       let screenWidth = max(proxy.size.width, 1)
       let menuWidthPoints = screenWidth * configuration.menuWidth
+
+      // Extract drag activation parameters
+      let dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat) = {
+        switch configuration.dragActivation {
+        case .edge(let edgeWidth, let startThreshold, let openCloseThreshold):
+          return (true, max(edgeWidth, 0), max(startThreshold, 0), max(openCloseThreshold, 0))
+        case .full(let startThreshold, let openCloseThreshold):
+          return (false, 0, max(startThreshold, 0), max(openCloseThreshold, 0))
+        }
+      }()
+
       let dragGesture = DragGesture()
         .onChanged { value in
           let horizontal = abs(value.translation.width)
           let vertical = abs(value.translation.height)
-          let isEdgeOnly = configuration.dragActivation == .edge
-          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > configuration.dragEdgeWidth
+          let isEdgeOnly = dragParams.isEdgeOnly
+          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth
 
           if isOpeningFromEdge {
             if isMenuDragging {
@@ -257,7 +252,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           }
           guard horizontal <= menuWidthPoints else { return }
           guard !(model.currentState == .closed && value.translation.width < 0) else { return }
-          if horizontal > configuration.dragStartThreshold && !isMenuDragging {
+          if horizontal > dragParams.startThreshold && !isMenuDragging {
             isMenuDragging = true
           }
           if model.currentState == .open && value.translation.width > 0 {
@@ -271,8 +266,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           }
         }
         .onEnded { value in
-          let isEdgeOnly = configuration.dragActivation == .edge
-          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > configuration.dragEdgeWidth
+          let isEdgeOnly = dragParams.isEdgeOnly
+          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth
           if isOpeningFromEdge {
             if isMenuDragging {
               isMenuDragging = false
@@ -285,8 +280,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           if isMenuDragging {
             isMenuDragging = false
           }
-          let shouldClose = value.translation.width < -configuration.openCloseThreshold
-          let shouldOpen = value.translation.width > configuration.openCloseThreshold
+          let shouldClose = value.translation.width < -dragParams.openCloseThreshold
+          let shouldOpen = value.translation.width > dragParams.openCloseThreshold
           let startingState = model.currentState
 
           withTransaction(Transaction(animation: configuration.menuAnimation)) {
@@ -438,6 +433,11 @@ private struct SideMenuPreview: View {
   @State private var scale: Double = 1
   @State private var dimValue: Double = 0.2
 
+  // Drag activation parameters
+  @State private var edgeWidth: Double = 24
+  @State private var startThreshold: Double = 6
+  @State private var openCloseThreshold: Double = 50
+
   @State var showDetail = false
 
   private var menuAnimation: Animation {
@@ -460,6 +460,24 @@ private struct SideMenuPreview: View {
     }
   }
 
+  private var dragActivation: MenuDragActivation {
+    switch configuration.dragActivation {
+    case .edge:
+      return .edge(edgeWidth: edgeWidth, startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
+    case .full:
+      return .full(startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
+    }
+  }
+
+  private var isEdgeDragActivation: Bool {
+    switch configuration.dragActivation {
+    case .edge:
+      return true
+    case .full:
+      return false
+    }
+  }
+
   var body: some View {
     SideMenuView(
       model: model,
@@ -467,10 +485,7 @@ private struct SideMenuPreview: View {
         menuWidth: configuration.menuWidth,
         menuStyle: menuStyle,
         menuAnimation: menuAnimation,
-        dragActivation: configuration.dragActivation,
-        dragEdgeWidth: configuration.dragEdgeWidth,
-        dragStartThreshold: configuration.dragStartThreshold,
-        openCloseThreshold: configuration.openCloseThreshold,
+        dragActivation: dragActivation,
         gestureHandling: configuration.gestureHandling,
         hapticStyle: configuration.hapticStyle
       )
@@ -494,8 +509,19 @@ private struct SideMenuPreview: View {
             
             Section {
               Picker("Drag", selection: $configuration.dragActivation) {
-                Text("Full").tag(MenuDragActivation.full)
-                Text("Edge").tag(MenuDragActivation.edge)
+                Text("Full").tag(MenuDragActivation.full())
+                Text("Edge").tag(MenuDragActivation.edge())
+              }
+              .onChange(of: configuration.dragActivation) { _, newValue in
+                switch newValue {
+                case .edge(let defaultEdgeWidth, let defaultStartThreshold, let defaultOpenCloseThreshold):
+                  edgeWidth = defaultEdgeWidth
+                  startThreshold = defaultStartThreshold
+                  openCloseThreshold = defaultOpenCloseThreshold
+                case .full(let defaultStartThreshold, let defaultOpenCloseThreshold):
+                  startThreshold = defaultStartThreshold
+                  openCloseThreshold = defaultOpenCloseThreshold
+                }
               }
               Picker("Gesture", selection: $configuration.gestureHandling) {
                 Text("Simultaneous").tag(MenuGestureHandling.simultaneous)
@@ -504,20 +530,20 @@ private struct SideMenuPreview: View {
               }
               PreviewValueSlider(
                 title: "Edge Width",
-                value: $configuration.dragEdgeWidth.asDouble(),
+                value: $edgeWidth,
                 range: 0...80,
                 step: 2
               )
-              .disabled(configuration.dragActivation == .full)
+              .disabled(!isEdgeDragActivation)
               PreviewValueSlider(
                 title: "Drag Start",
-                value: $configuration.dragStartThreshold.asDouble(),
+                value: $startThreshold,
                 range: 0...20,
                 step: 1
               )
               PreviewValueSlider(
                 title: "Open/Close",
-                value: $configuration.openCloseThreshold.asDouble(),
+                value: $openCloseThreshold,
                 range: 20...120,
                 step: 5
               )
