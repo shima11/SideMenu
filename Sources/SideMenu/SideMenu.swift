@@ -52,7 +52,7 @@ public enum MenuEdge: Equatable, Hashable, Sendable {
 ///   menuWidth: 0.7,
 ///   menuStyle: .slideInOver,
 ///   blur: 3,
-///   enableHaptics: true
+///   hapticStyle: .medium
 /// )
 /// ```
 public struct SideMenuConfiguration: Equatable, Sendable {
@@ -112,10 +112,10 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   /// Default is `.simultaneous`.
   public var gestureHandling: MenuGestureHandling
 
-  /// Whether haptic feedback is triggered when opening or closing the menu via gesture.
+  /// The style of impact haptic feedback when opening or closing the menu via gesture.
   ///
-  /// Default is `true`.
-  public var enableHaptics: Bool
+  /// Set to `nil` to disable haptic feedback. Default is `.medium`.
+  public var hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle?
 
   /// Edge of the screen from which the menu appears.
   ///
@@ -138,7 +138,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - dragStartThreshold: Minimum drag distance to start in points. Default is 6.0.
   ///   - openCloseThreshold: Minimum drag distance to open/close in points. Default is 50.0.
   ///   - gestureHandling: How the menu drag gesture competes with other gestures. Default is `.simultaneous`.
-  ///   - enableHaptics: Whether to enable haptic feedback. Default is `true`.
+  ///   - hapticStyle: The style of impact haptic feedback. Set to `nil` to disable. Default is `.medium`.
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
   public init(
     menuWidth: CGFloat = 0.8,
@@ -152,7 +152,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     dragStartThreshold: CGFloat = 6,
     openCloseThreshold: CGFloat = 50,
     gestureHandling: MenuGestureHandling = .simultaneous,
-    enableHaptics: Bool = true,
+    hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
     edge: MenuEdge = .leading
   ) {
     self.menuWidth = min(max(menuWidth, 0), 1)
@@ -166,7 +166,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     self.dragStartThreshold = max(dragStartThreshold, 0)
     self.openCloseThreshold = max(openCloseThreshold, 0)
     self.gestureHandling = gestureHandling
-    self.enableHaptics = enableHaptics
+    self.hapticStyle = hapticStyle
     self.edge = edge
   }
 }
@@ -319,7 +319,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
           let didClose = startingState == .open && shouldClose
           let didOpen = startingState == .closed && shouldOpen
-          if (didClose || didOpen) && configuration.enableHaptics {
+          if didClose || didOpen {
             hapticGenerator?.impactOccurred()
           }
         }
@@ -404,8 +404,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       focusTarget = (newValue == .open) ? .menu : .main
     }
     .onAppear {
-      if configuration.enableHaptics {
-        hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
+      if let style = configuration.hapticStyle {
+        hapticGenerator = UIImpactFeedbackGenerator(style: style)
         hapticGenerator?.prepare()
       }
     }
@@ -469,7 +469,7 @@ private struct SideMenuPreview: View {
         dragStartThreshold: configuration.dragStartThreshold,
         openCloseThreshold: configuration.openCloseThreshold,
         gestureHandling: configuration.gestureHandling,
-        enableHaptics: configuration.enableHaptics
+        hapticStyle: configuration.hapticStyle
       )
     ) {
       ZStack {
@@ -518,7 +518,14 @@ private struct SideMenuPreview: View {
                 range: 20...120,
                 step: 5
               )
-              Toggle("Haptics", isOn: $configuration.enableHaptics)
+              Picker("Haptic", selection: $configuration.hapticStyle) {
+                Text("None").tag(nil as UIImpactFeedbackGenerator.FeedbackStyle?)
+                Text("Light").tag(UIImpactFeedbackGenerator.FeedbackStyle.light as UIImpactFeedbackGenerator.FeedbackStyle?)
+                Text("Medium").tag(UIImpactFeedbackGenerator.FeedbackStyle.medium as UIImpactFeedbackGenerator.FeedbackStyle?)
+                Text("Heavy").tag(UIImpactFeedbackGenerator.FeedbackStyle.heavy as UIImpactFeedbackGenerator.FeedbackStyle?)
+                Text("Soft").tag(UIImpactFeedbackGenerator.FeedbackStyle.soft as UIImpactFeedbackGenerator.FeedbackStyle?)
+                Text("Rigid").tag(UIImpactFeedbackGenerator.FeedbackStyle.rigid as UIImpactFeedbackGenerator.FeedbackStyle?)
+              }
               Picker("Style", selection: $configuration.menuStyle) {
                 Text("Slide In Over").tag(MenuStyle.slideInOver)
                 Text("Slide In Out").tag(MenuStyle.slideInOut)
