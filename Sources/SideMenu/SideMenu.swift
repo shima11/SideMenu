@@ -387,7 +387,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .modifier(MenuGestureModifier(gesture: dragGesture, handling: configuration.gestureHandling))
+      .simultaneousGesture(dragGesture)
     .accessibilityAction(.escape) {
       guard isMenuOpen else { return }
       withAnimation(configuration.menuAnimation) {
@@ -415,23 +415,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
   }
 }
-
-private struct MenuGestureModifier<G: Gesture>: ViewModifier {
-  let gesture: G
-  let handling: MenuGestureHandling
-
-  func body(content: Content) -> some View {
-    switch handling {
-    case .simultaneous:
-      content.simultaneousGesture(gesture)
-    case .highPriority:
-      content.highPriorityGesture(gesture)
-    case .exclusive:
-      content.gesture(gesture)
-    }
-  }
-}
-
 
 #Preview {
   SideMenuPreview()
