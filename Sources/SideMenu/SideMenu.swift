@@ -6,9 +6,16 @@ import SwiftUI
 /// Visual presentation style for the side menu.
 public enum MenuStyle: Equatable, Hashable, Sendable {
   /// Menu slides over the main content, which remains in place.
-  case slideInOver
+  /// - Parameters:
+  ///   - blur: Maximum blur radius applied to main content (default: 2.0)
+  ///   - scale: Minimum scale factor applied to main content (default: 1.0)
+  ///   - dimValue: Opacity of the dim overlay (default: 0.2)
+  case slideInOver(blur: CGFloat = 2, scale: CGFloat = 1, dimValue: CGFloat = 0.2)
+
   /// Menu and main content both slide together.
-  case slideInOut
+  /// - Parameters:
+  ///   - dimValue: Opacity of the dim overlay (default: 0.2)
+  case slideInOut(dimValue: CGFloat = 0.2)
 }
 
 /// Defines which area of the screen can initiate a drag gesture to open the menu.
@@ -50,8 +57,7 @@ public enum MenuEdge: Equatable, Hashable, Sendable {
 /// ```swift
 /// let config = SideMenuConfiguration(
 ///   menuWidth: 0.7,
-///   menuStyle: .slideInOver,
-///   blur: 3,
+///   menuStyle: .slideInOver(blur: 3, scale: 0.95, dimValue: 0.3),
 ///   hapticStyle: .medium
 /// )
 /// ```
@@ -64,23 +70,8 @@ public struct SideMenuConfiguration: Equatable, Sendable {
 
   /// Visual presentation style of the menu.
   ///
-  /// Default is `.slideInOut`.
+  /// Default is `.slideInOut()`.
   public var menuStyle: MenuStyle
-
-  /// Maximum blur radius applied to main content when menu is open.
-  ///
-  /// Negative values are clamped to 0. Default is 2.0.
-  public var blur: CGFloat
-
-  /// Minimum scale factor applied to main content when menu is fully open (0.0 to 1.0).
-  ///
-  /// Values outside this range are automatically clamped. Default is 1.0 (no scaling).
-  public var scale: CGFloat
-
-  /// Opacity of the dim overlay when menu is open (0.0 to 1.0).
-  ///
-  /// Values outside this range are automatically clamped. Default is 0.2.
-  public var dimValue: CGFloat
 
   /// Animation curve used for menu transitions.
   ///
@@ -128,10 +119,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///
   /// - Parameters:
   ///   - menuWidth: Width of the menu as a fraction of screen width (0.0 to 1.0). Default is 0.8.
-  ///   - menuStyle: Visual presentation style. Default is `.slideInOut`.
-  ///   - blur: Maximum blur radius for main content. Default is 2.0.
-  ///   - scale: Minimum scale factor for main content (0.0 to 1.0). Default is 1.0.
-  ///   - dimValue: Dim overlay opacity (0.0 to 1.0). Default is 0.2.
+  ///   - menuStyle: Visual presentation style. Default is `.slideInOut()`.
   ///   - menuAnimation: Animation curve for transitions. Default is `.snappy(duration: 0.35, extraBounce: 0.1)`.
   ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full`.
   ///   - dragEdgeWidth: Width of edge drag area in points. Default is 24.0.
@@ -142,11 +130,8 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
   public init(
     menuWidth: CGFloat = 0.8,
-    menuStyle: MenuStyle = .slideInOut,
-    blur: CGFloat = 2,
-    scale: CGFloat = 1,
-    dimValue: CGFloat = 0.2,
-    menuAnimation: Animation = .snappy(duration: 0.35, extraBounce: 0.1),
+    menuStyle: MenuStyle = .slideInOut(),
+    menuAnimation: Animation = .easeInOut,
     dragActivation: MenuDragActivation = .full,
     dragEdgeWidth: CGFloat = 24,
     dragStartThreshold: CGFloat = 6,
@@ -157,9 +142,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ) {
     self.menuWidth = min(max(menuWidth, 0), 1)
     self.menuStyle = menuStyle
-    self.blur = max(blur, 0)
-    self.scale = min(max(scale, 0), 1)
-    self.dimValue = min(max(dimValue, 0), 1)
     self.menuAnimation = menuAnimation
     self.dragActivation = dragActivation
     self.dragEdgeWidth = max(dragEdgeWidth, 0)
@@ -328,12 +310,22 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       let baseOffset = -(menuWidthPoints * CGFloat(model.currentState == .open ? 0 : 1))
       let calcOffset = baseOffset + CGFloat(model.dragOffset)
 
+      // Extract style-specific parameters
+      let styleParams: (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat) = {
+        switch configuration.menuStyle {
+        case .slideInOver(let blur, let scale, let dimValue):
+          return (true, max(blur, 0), min(max(scale, 0), 1), min(max(dimValue, 0), 1))
+        case .slideInOut(let dimValue):
+          return (false, 0, 1, min(max(dimValue, 0), 1))
+        }
+      }()
+
       HStack (spacing: 0) {
-        if configuration.menuStyle == .slideInOver {
+        if styleParams.isSlideInOver {
           ZStack(alignment: .leading) {
             mainView
-              .blur(radius: model.calculateBlur(maxValue: configuration.blur, totalWidth: screenWidth))
-              .scaleEffect(model.calculateScale(minScale: configuration.scale, totalWidth: screenWidth))
+              .blur(radius: model.calculateBlur(maxValue: styleParams.blur, totalWidth: screenWidth))
+              .scaleEffect(model.calculateScale(minScale: styleParams.scale, totalWidth: screenWidth))
               .frame(width: screenWidth)
               .disabled(isMenuDragging)
               .allowsHitTesting(!isMenuDragging)
@@ -342,7 +334,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
             Color.clear
               .frame(maxWidth: .infinity,  maxHeight: .infinity)
-              .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: configuration.dimValue, totalWidth: screenWidth))))
+              .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: styleParams.dimValue, totalWidth: screenWidth))))
               .allowsHitTesting(isMenuOpen)
               .onTapGesture {
                 if model.isOpen {
@@ -375,7 +367,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
               Color.clear
                 .frame(maxWidth: .infinity,  maxHeight: .infinity)
-                .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: configuration.dimValue, totalWidth: screenWidth))))
+                .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: styleParams.dimValue, totalWidth: screenWidth))))
                 .offset(x: calcOffset, y: 0)
                 .allowsHitTesting(isMenuOpen)
                 .onTapGesture {
@@ -441,6 +433,11 @@ private struct SideMenuPreview: View {
   @State private var animationDuration: Double = 0.35
   @State private var animationBounce: Double = 0.1
 
+  // Style-specific parameters
+  @State private var blur: Double = 2
+  @State private var scale: Double = 1
+  @State private var dimValue: Double = 0.2
+
   @State var showDetail = false
 
   private var menuAnimation: Animation {
@@ -454,15 +451,21 @@ private struct SideMenuPreview: View {
     }
   }
 
+  private var menuStyle: MenuStyle {
+    switch configuration.menuStyle {
+    case .slideInOver:
+      return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)
+    case .slideInOut:
+      return .slideInOut(dimValue: dimValue)
+    }
+  }
+
   var body: some View {
     SideMenuView(
       model: model,
       configuration: SideMenuConfiguration(
         menuWidth: configuration.menuWidth,
-        menuStyle: configuration.menuStyle,
-        blur: configuration.blur,
-        scale: configuration.scale,
-        dimValue: configuration.dimValue,
+        menuStyle: menuStyle,
         menuAnimation: menuAnimation,
         dragActivation: configuration.dragActivation,
         dragEdgeWidth: configuration.dragEdgeWidth,
@@ -527,8 +530,18 @@ private struct SideMenuPreview: View {
                 Text("Rigid").tag(UIImpactFeedbackGenerator.FeedbackStyle.rigid as UIImpactFeedbackGenerator.FeedbackStyle?)
               }
               Picker("Style", selection: $configuration.menuStyle) {
-                Text("Slide In Over").tag(MenuStyle.slideInOver)
-                Text("Slide In Out").tag(MenuStyle.slideInOut)
+                Text("Slide In Over").tag(MenuStyle.slideInOver())
+                Text("Slide In Out").tag(MenuStyle.slideInOut())
+              }
+              .onChange(of: configuration.menuStyle) { _, newValue in
+                switch newValue {
+                case .slideInOver(let defaultBlur, let defaultScale, let defaultDimValue):
+                  blur = defaultBlur
+                  scale = defaultScale
+                  dimValue = defaultDimValue
+                case .slideInOut(let defaultDimValue):
+                  dimValue = defaultDimValue
+                }
               }
               Picker("Animation", selection: $animationStyle) {
                 ForEach(PreviewAnimationStyle.allCases) { style in
@@ -557,19 +570,19 @@ private struct SideMenuPreview: View {
               )
               PreviewValueSlider(
                 title: "Blur",
-                value: $configuration.blur.asDouble(),
+                value: $blur,
                 range: 0...10,
                 step: 0.5
               )
               PreviewValueSlider(
                 title: "Scale",
-                value: $configuration.scale.asDouble(),
+                value: $scale,
                 range: 0.8...1.0,
                 step: 0.02
               )
               PreviewValueSlider(
                 title: "Dim",
-                value: $configuration.dimValue.asDouble(),
+                value: $dimValue,
                 range: 0...0.6,
                 step: 0.05
               )

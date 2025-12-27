@@ -7,13 +7,37 @@ struct ContentView: View {
   @State private var selectedRoom: String = "Room 1"
   @State private var configuration = SideMenuConfiguration()
   @State private var showDetail = false
-  
+
+  // Style-specific parameters
+  @State private var blur: Double = 2
+  @State private var scale: Double = 1
+  @State private var dimValue: Double = 0.2
+
   private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
-  
+
+  private var menuStyle: MenuStyle {
+    switch configuration.menuStyle {
+    case .slideInOver:
+      return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)
+    case .slideInOut:
+      return .slideInOut(dimValue: dimValue)
+    }
+  }
+
   var body: some View {
     SideMenuView(
       model: menuState,
-      configuration: configuration
+      configuration: SideMenuConfiguration(
+        menuWidth: configuration.menuWidth,
+        menuStyle: menuStyle,
+        menuAnimation: configuration.menuAnimation,
+        dragActivation: configuration.dragActivation,
+        dragEdgeWidth: configuration.dragEdgeWidth,
+        dragStartThreshold: configuration.dragStartThreshold,
+        openCloseThreshold: configuration.openCloseThreshold,
+        gestureHandling: configuration.gestureHandling,
+        hapticStyle: configuration.hapticStyle
+      )
     ) {
       // Side Menu Content
       menuContent
@@ -44,10 +68,20 @@ struct ContentView: View {
           
           Section("Settings") {
             Picker("Menu Style", selection: $configuration.menuStyle) {
-              Text("Slide In Over").tag(MenuStyle.slideInOver)
-              Text("Slide In Out").tag(MenuStyle.slideInOut)
+              Text("Slide In Over").tag(MenuStyle.slideInOver())
+              Text("Slide In Out").tag(MenuStyle.slideInOut())
             }
-            
+            .onChange(of: configuration.menuStyle) { _, newValue in
+              switch newValue {
+              case .slideInOver(let defaultBlur, let defaultScale, let defaultDimValue):
+                blur = defaultBlur
+                scale = defaultScale
+                dimValue = defaultDimValue
+              case .slideInOut(let defaultDimValue):
+                dimValue = defaultDimValue
+              }
+            }
+
             Picker("Drag Activation", selection: $configuration.dragActivation) {
               Text("Full Screen").tag(MenuDragActivation.full)
               Text("Edge Only").tag(MenuDragActivation.edge)
@@ -58,8 +92,13 @@ struct ContentView: View {
               Text("Priority").tag(MenuGestureHandling.highPriority)
               Text("Exclusive").tag(MenuGestureHandling.exclusive)
             }
-            
-            Toggle("Haptic Feedback", isOn: $configuration.enableHaptics)
+
+            Picker("Haptic", selection: $configuration.hapticStyle) {
+              Text("None").tag(nil as UIImpactFeedbackGenerator.FeedbackStyle?)
+              Text("Light").tag(UIImpactFeedbackGenerator.FeedbackStyle.light as UIImpactFeedbackGenerator.FeedbackStyle?)
+              Text("Medium").tag(UIImpactFeedbackGenerator.FeedbackStyle.medium as UIImpactFeedbackGenerator.FeedbackStyle?)
+              Text("Heavy").tag(UIImpactFeedbackGenerator.FeedbackStyle.heavy as UIImpactFeedbackGenerator.FeedbackStyle?)
+            }
             
             VStack(alignment: .leading, spacing: 8) {
               HStack {
@@ -75,20 +114,30 @@ struct ContentView: View {
               HStack {
                 Text("Blur Effect")
                 Spacer()
-                Text(configuration.blur, format: .number.precision(.fractionLength(1)))
+                Text(blur, format: .number.precision(.fractionLength(1)))
                   .foregroundStyle(.secondary)
               }
-              Slider(value: $configuration.blur.asDouble(), in: 0...10, step: 0.5)
+              Slider(value: $blur, in: 0...10, step: 0.5)
             }
-            
+
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Scale")
+                Spacer()
+                Text(scale, format: .number.precision(.fractionLength(2)))
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $scale, in: 0.8...1.0, step: 0.02)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
               HStack {
                 Text("Dim Opacity")
                 Spacer()
-                Text(configuration.dimValue, format: .number.precision(.fractionLength(2)))
+                Text(dimValue, format: .number.precision(.fractionLength(2)))
                   .foregroundStyle(.secondary)
               }
-              Slider(value: $configuration.dimValue.asDouble(), in: 0...0.6, step: 0.05)
+              Slider(value: $dimValue, in: 0...0.6, step: 0.05)
             }
           }
         }
