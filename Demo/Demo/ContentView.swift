@@ -46,7 +46,6 @@ struct ContentView: View {
         menuStyle: menuStyle,
         menuAnimation: configuration.menuAnimation,
         dragActivation: dragActivation,
-        gestureHandling: configuration.gestureHandling,
         hapticStyle: configuration.hapticStyle
       )
     ) {
@@ -107,12 +106,6 @@ struct ContentView: View {
                 startThreshold = defaultStartThreshold
                 openCloseThreshold = defaultOpenCloseThreshold
               }
-            }
-
-            Picker("Gesture Handling", selection: $configuration.gestureHandling) {
-              Text("Simultaneous").tag(MenuGestureHandling.simultaneous)
-              Text("Priority").tag(MenuGestureHandling.highPriority)
-              Text("Exclusive").tag(MenuGestureHandling.exclusive)
             }
 
             Picker("Haptic", selection: $configuration.hapticStyle) {

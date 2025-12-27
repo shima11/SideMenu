@@ -34,16 +34,6 @@ public enum MenuDragActivation: Equatable, Hashable, Sendable {
   case full(startThreshold: CGFloat = 6, openCloseThreshold: CGFloat = 50)
 }
 
-/// Controls how the menu drag gesture competes with other gestures.
-public enum MenuGestureHandling: Equatable, Hashable, Sendable {
-  /// Allow other gestures (like sliders) to recognize alongside the menu drag.
-  case simultaneous
-  /// Prefer the menu drag gesture when it recognizes.
-  case highPriority
-  /// Let the menu drag gesture take exclusive control.
-  case exclusive
-}
-
 /// Specifies which edge the menu appears from.
 public enum MenuEdge: Equatable, Hashable, Sendable {
   /// Menu appears from the leading edge (left in LTR, right in RTL).
@@ -91,11 +81,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   /// Default is `.full()`.
   public var dragActivation: MenuDragActivation
 
-  /// How the menu drag gesture competes with other gestures like sliders.
-  ///
-  /// Default is `.simultaneous`.
-  public var gestureHandling: MenuGestureHandling
-
   /// The style of impact haptic feedback when opening or closing the menu via gesture.
   ///
   /// Set to `nil` to disable haptic feedback. Default is `.medium`.
@@ -115,7 +100,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - menuStyle: Visual presentation style. Default is `.slideInOut()`.
   ///   - menuAnimation: Animation curve for transitions. Default is `.snappy(duration: 0.35, extraBounce: 0.1)`.
   ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full()`.
-  ///   - gestureHandling: How the menu drag gesture competes with other gestures. Default is `.simultaneous`.
   ///   - hapticStyle: The style of impact haptic feedback. Set to `nil` to disable. Default is `.medium`.
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
   public init(
@@ -123,7 +107,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     menuStyle: MenuStyle = .slideInOut(),
     menuAnimation: Animation = .easeInOut,
     dragActivation: MenuDragActivation = .full(),
-    gestureHandling: MenuGestureHandling = .simultaneous,
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
     edge: MenuEdge = .leading
   ) {
@@ -131,7 +114,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     self.menuStyle = menuStyle
     self.menuAnimation = menuAnimation
     self.dragActivation = dragActivation
-    self.gestureHandling = gestureHandling
     self.hapticStyle = hapticStyle
     self.edge = edge
   }
@@ -486,7 +468,6 @@ private struct SideMenuPreview: View {
         menuStyle: menuStyle,
         menuAnimation: menuAnimation,
         dragActivation: dragActivation,
-        gestureHandling: configuration.gestureHandling,
         hapticStyle: configuration.hapticStyle
       )
     ) {
@@ -522,11 +503,6 @@ private struct SideMenuPreview: View {
                   startThreshold = defaultStartThreshold
                   openCloseThreshold = defaultOpenCloseThreshold
                 }
-              }
-              Picker("Gesture", selection: $configuration.gestureHandling) {
-                Text("Simultaneous").tag(MenuGestureHandling.simultaneous)
-                Text("Priority").tag(MenuGestureHandling.highPriority)
-                Text("Exclusive").tag(MenuGestureHandling.exclusive)
               }
               PreviewValueSlider(
                 title: "Edge Width",
