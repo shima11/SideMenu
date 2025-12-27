@@ -433,7 +433,7 @@ private struct SideMenuPreview: View {
     }
   }
 
-  private var menuStyle: MenuStyle {
+  private var menuStyle: SideMenu.MenuStyle {
     switch configuration.menuStyle {
     case .slideInOver:
       return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)

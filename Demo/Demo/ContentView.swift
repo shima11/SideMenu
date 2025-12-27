@@ -20,7 +20,7 @@ struct ContentView: View {
 
   private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
 
-  private var menuStyle: MenuStyle {
+  private var menuStyle: SideMenu.MenuStyle {
     switch configuration.menuStyle {
     case .slideInOver:
       return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)
