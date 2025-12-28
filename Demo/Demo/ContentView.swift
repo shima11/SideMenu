@@ -164,37 +164,31 @@ struct ContentView: View {
             Text("Slide In Over").tag(MenuStyle.slideInOver())
             Text("Slide In Out").tag(MenuStyle.slideInOut())
           }
-          .onChange(of: configuration.menuStyle) { _, newValue in
-            switch newValue {
-            case .slideInOver(let defaultBlur, let defaultScale, let defaultDimValue):
-              blur = defaultBlur
-              scale = defaultScale
-              dimValue = defaultDimValue
-            case .slideInOut(let defaultDimValue):
-              dimValue = defaultDimValue
+
+          // Blur (slideInOver only)
+          if case .slideInOver = configuration.menuStyle {
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Blur Effect")
+                Spacer()
+                Text(blur, format: .number.precision(.fractionLength(1)))
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $blur, in: 0...10, step: 0.5)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Scale")
+                Spacer()
+                Text(scale, format: .number.precision(.fractionLength(2)))
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $scale, in: 0.8...1.0, step: 0.02)
             }
           }
 
-          VStack(alignment: .leading, spacing: 8) {
-            HStack {
-              Text("Blur Effect")
-              Spacer()
-              Text(blur, format: .number.precision(.fractionLength(1)))
-                .foregroundStyle(.secondary)
-            }
-            Slider(value: $blur, in: 0...10, step: 0.5)
-          }
-
-          VStack(alignment: .leading, spacing: 8) {
-            HStack {
-              Text("Scale")
-              Spacer()
-              Text(scale, format: .number.precision(.fractionLength(2)))
-                .foregroundStyle(.secondary)
-            }
-            Slider(value: $scale, in: 0.8...1.0, step: 0.02)
-          }
-
+          // Dim (both styles)
           VStack(alignment: .leading, spacing: 8) {
             HStack {
               Text("Dim Opacity")
@@ -211,16 +205,39 @@ struct ContentView: View {
             Text("Full Screen").tag(MenuDragActivation.full())
             Text("Edge Only").tag(MenuDragActivation.edge())
           }
-          .onChange(of: configuration.dragActivation) { _, newValue in
-            switch newValue {
-            case .edge(let defaultEdgeWidth, let defaultStartThreshold, let defaultOpenCloseThreshold):
-              edgeWidth = defaultEdgeWidth
-              startThreshold = defaultStartThreshold
-              openCloseThreshold = defaultOpenCloseThreshold
-            case .full(let defaultStartThreshold, let defaultOpenCloseThreshold):
-              startThreshold = defaultStartThreshold
-              openCloseThreshold = defaultOpenCloseThreshold
+
+          // Edge width (edge only)
+          if case .edge = configuration.dragActivation {
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Edge Width")
+                Spacer()
+                Text("\(Int(edgeWidth))pt")
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $edgeWidth, in: 10...80, step: 2)
             }
+          }
+
+          // Drag thresholds (both modes, but labeled differently)
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Start Threshold")
+              Spacer()
+              Text("\(Int(startThreshold))pt")
+                .foregroundStyle(.secondary)
+            }
+            Slider(value: $startThreshold, in: 0...20, step: 1)
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Open/Close Threshold")
+              Spacer()
+              Text("\(Int(openCloseThreshold))pt")
+                .foregroundStyle(.secondary)
+            }
+            Slider(value: $openCloseThreshold, in: 20...120, step: 5)
           }
 
           Picker("Haptic Feedback", selection: $configuration.hapticStyle) {
