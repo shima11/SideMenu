@@ -160,26 +160,24 @@ public final class SideMenuState {
   /// This method is designed for calculating opacity and other linear progress values,
   /// providing a normalized progress value from 0.0 (closed) to 1.0 (open).
   ///
-  /// - Parameter totalWidth: The total width of the screen
+  /// - Parameter menuWidth: The width of the menu
   /// - Returns: The progress value from 0.0 (closed) to 1.0 (open)
-  public func calculateProgress(totalWidth: CGFloat) -> CGFloat {
-    let normalizedWidth = max(totalWidth, AnimationConstants.minimumWidth)
+  public func calculateProgress(menuWidth: CGFloat) -> CGFloat {
+    let normalizedWidth = max(menuWidth, AnimationConstants.minimumWidth)
     let progress = CGFloat(dragOffset) / normalizedWidth
 
-    if progress == 0 {
-      return currentState == .open ? 1.0 : 0.0
-    }
-
     if currentState == .open {
-      if dragOffset > 0 {
+      // When menu is open, keep dimming at maximum unless dragging to close
+      if dragOffset >= 0 {
         return 1.0
       } else {
-        let value = 1.0 - abs(progress)
+        let value = 1.0 + progress  // progress is negative when dragging left
         return max(value, 0.0)
       }
     } else {
+      // When menu is closed, dimming increases as menu opens
       if dragOffset > 0 {
-        let value = abs(progress)
+        let value = progress
         return min(value, 1.0)
       } else {
         return 0.0

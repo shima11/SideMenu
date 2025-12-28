@@ -1,8 +1,6 @@
 
 import SwiftUI
 
-// https://medium.com/better-programming/sidemenu-using-swiftui-939a01c86ecd
-
 /// Visual presentation style for the side menu.
 public enum MenuStyle: Equatable, Hashable, Sendable {
   /// Menu slides over the main content, which remains in place.
@@ -23,15 +21,15 @@ public enum MenuDragActivation: Equatable, Hashable, Sendable {
   /// Only drags starting from the screen edge can open the menu.
   /// - Parameters:
   ///   - edgeWidth: Width of the edge area in points (default: 24)
-  ///   - startThreshold: Minimum drag distance to start in points (default: 6)
+  ///   - startThreshold: Minimum drag distance to start in points (default: 5)
   ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
-  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 6, openCloseThreshold: CGFloat = 50)
+  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 5, openCloseThreshold: CGFloat = 50)
 
   /// Drags starting anywhere on the screen can open the menu.
   /// - Parameters:
-  ///   - startThreshold: Minimum drag distance to start in points (default: 6)
+  ///   - startThreshold: Minimum drag distance to start in points (default: 5)
   ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
-  case full(startThreshold: CGFloat = 6, openCloseThreshold: CGFloat = 50)
+  case full(startThreshold: CGFloat = 5, openCloseThreshold: CGFloat = 50)
 }
 
 /// Specifies which edge the menu appears from.
@@ -73,7 +71,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
 
   /// Animation curve used for menu transitions.
   ///
-  /// Default is `.snappy(duration: 0.35, extraBounce: 0.1)`.
+  /// Default is `.easeOut(duration: 0.3)` for flat, non-bouncy motion.
   public var menuAnimation: Animation
 
   /// Controls which screen area can initiate a drag to open the menu.
@@ -98,14 +96,14 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   /// - Parameters:
   ///   - menuWidth: Width of the menu as a fraction of screen width (0.0 to 1.0). Default is 0.8.
   ///   - menuStyle: Visual presentation style. Default is `.slideInOut()`.
-  ///   - menuAnimation: Animation curve for transitions. Default is `.snappy(duration: 0.35, extraBounce: 0.1)`.
+  ///   - menuAnimation: Animation curve for transitions. Default is `.easeOut(duration: 0.3)`.
   ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full()`.
   ///   - hapticStyle: The style of impact haptic feedback. Set to `nil` to disable. Default is `.medium`.
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
   public init(
     menuWidth: CGFloat = 0.8,
     menuStyle: MenuStyle = .slideInOut(),
-    menuAnimation: Animation = .easeInOut,
+    menuAnimation: Animation = .easeOut(duration: 0.3),
     dragActivation: MenuDragActivation = .full(),
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
     edge: MenuEdge = .leading
@@ -305,7 +303,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
         handleDragChanged(value: value, menuWidth: menuWidth, dragParams: dragParams)
       }
       .onEnded { value in
-        handleDragEnded(value: value, dragParams: dragParams)
+        handleDragEnded(value: value, dragParams: dragParams, menuWidth: menuWidth)
       }
   }
 
@@ -360,7 +358,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   private func handleDragEnded(
     value: DragGesture.Value,
-    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat)
+    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat),
+    menuWidth: CGFloat
   ) {
     // Edge-only activation check
     if dragParams.isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth {
@@ -414,7 +413,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
         offset: 0
       )
 
-      dimOverlay(dimValue: styleParams.dimValue, screenWidth: screenWidth, offset: 0)
+      dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: 0)
 
       sideMenuView(width: menuWidthPoints, offset: calcOffset)
     }
@@ -437,7 +436,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
         offset: calcOffset
       )
 
-      dimOverlay(dimValue: styleParams.dimValue, screenWidth: screenWidth, offset: calcOffset)
+      dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset)
     }
   }
 
@@ -460,12 +459,12 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   }
 
   @ViewBuilder
-  private func dimOverlay(dimValue: CGFloat, screenWidth: CGFloat, offset: CGFloat) -> some View {
+  private func dimOverlay(dimValue: CGFloat, menuWidth: CGFloat, offset: CGFloat) -> some View {
     Color.clear
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .overlay(
         Color.black.opacity(
-          Double(model.calculateProgress(totalWidth: screenWidth) * dimValue)
+          Double(model.calculateProgress(menuWidth: menuWidth) * dimValue)
         )
       )
       .offset(x: offset, y: 0)
