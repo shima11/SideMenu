@@ -56,6 +56,12 @@ struct ContentView: View {
       // Main Content
       mainContent
     }
+    .sheet(isPresented: $showSettings) {
+      settingsView
+    }
+    .sheet(isPresented: $showDetail) {
+      detailView
+    }
   }
   
   private var menuContent: some View {
@@ -131,27 +137,25 @@ struct ContentView: View {
           }
         }
       }
-      .sheet(isPresented: $showDetail) {
-        NavigationStack {
-          VStack {
-            Text("Detail View")
-              .font(.title)
-            Text("This is a demo detail view")
-              .foregroundStyle(.secondary)
-          }
-          .navigationTitle("Details")
-          .navigationBarTitleDisplayMode(.inline)
-          .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-              Button("Close") {
-                showDetail = false
-              }
-            }
+    }
+  }
+
+  private var detailView: some View {
+    NavigationStack {
+      VStack {
+        Text("Detail View")
+          .font(.title)
+        Text("This is a demo detail view")
+          .foregroundStyle(.secondary)
+      }
+      .navigationTitle("Details")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Close") {
+            showDetail = false
           }
         }
-      }
-      .sheet(isPresented: $showSettings) {
-        settingsView
       }
     }
   }
