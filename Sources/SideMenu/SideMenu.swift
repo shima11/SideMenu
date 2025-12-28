@@ -491,281 +491,54 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 }
 
 #Preview {
-  SideMenuPreview()
-}
+  struct MinimalExample: View {
+    @State private var model = SideMenuState()
 
-private struct SideMenuPreview: View {
-  
-  enum Menu: String, CaseIterable {
-    case room1, room2, room3
-  }
-  
-  private enum PreviewAnimationStyle: String, CaseIterable, Identifiable {
-    case snappy
-    case spring
-    case easeInOut
-
-    var id: String { rawValue }
-  }
-
-  @State private var model = SideMenuState()
-  @State private var selectedMenu: Menu = .room1
-  @State private var configuration = SideMenuConfiguration()
-  @State private var animationStyle: PreviewAnimationStyle = .snappy
-  @State private var animationDuration: Double = 0.35
-  @State private var animationBounce: Double = 0.1
-
-  // Style-specific parameters
-  @State private var blur: Double = 2
-  @State private var scale: Double = 1
-  @State private var dimValue: Double = 0.2
-
-  // Drag activation parameters
-  @State private var edgeWidth: Double = 24
-  @State private var startThreshold: Double = 6
-  @State private var openCloseThreshold: Double = 50
-
-  @State var showDetail = false
-
-  private var menuAnimation: Animation {
-    switch animationStyle {
-    case .snappy:
-      return .snappy(duration: animationDuration, extraBounce: animationBounce)
-    case .spring:
-      return .spring(duration: animationDuration, bounce: animationBounce)
-    case .easeInOut:
-      return .easeInOut(duration: animationDuration)
-    }
-  }
-
-  private var menuStyle: SideMenu.MenuStyle {
-    switch configuration.menuStyle {
-    case .slideInOver:
-      return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)
-    case .slideInOut:
-      return .slideInOut(dimValue: dimValue)
-    }
-  }
-
-  private var dragActivation: MenuDragActivation {
-    switch configuration.dragActivation {
-    case .edge:
-      return .edge(edgeWidth: edgeWidth, startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
-    case .full:
-      return .full(startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
-    }
-  }
-
-  private var isEdgeDragActivation: Bool {
-    switch configuration.dragActivation {
-    case .edge:
-      return true
-    case .full:
-      return false
-    }
-  }
-
-  var body: some View {
-    SideMenuView(
-      model: model,
-      configuration: SideMenuConfiguration(
-        menuWidth: configuration.menuWidth,
-        menuStyle: menuStyle,
-        menuAnimation: menuAnimation,
-        dragActivation: dragActivation,
-        hapticStyle: configuration.hapticStyle
-      )
-    ) {
-      ZStack {
-        Color(uiColor: .systemBackground)
+    var body: some View {
+      SideMenuView(
+        model: model,
+        configuration: SideMenuConfiguration(
+          menuStyle: .slideInOver(),
+          dragActivation: .full()
+        )
+      ) {
+        List {
+          Section("Menu") {
+            Button("Home") { model.close() }
+            Button("Settings") { model.close() }
+            Button("Profile") { model.close() }
+          }
+        }
+      } mainView: {
         NavigationStack {
-          List {
-            Section("Room") {
-              ForEach(Menu.allCases, id: \.self) { item in
-                Button(item.rawValue) {
-                  withAnimation(menuAnimation) {
-                    selectedMenu = item
-                    if model.isOpen {
-                      model.close()
-                    }
-                  }
-                }
+          ScrollView {
+            VStack(spacing: 12) {
+              ForEach(0..<20) { index in
+                Text("Item \(index + 1)")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .padding()
+                  .background(Color(uiColor: .secondarySystemBackground))
+                  .clipShape(RoundedRectangle(cornerRadius: 8))
               }
             }
-            
-            Section {
-              Picker("Drag", selection: $configuration.dragActivation) {
-                Text("Full").tag(MenuDragActivation.full())
-                Text("Edge").tag(MenuDragActivation.edge())
-              }
-              .onChange(of: configuration.dragActivation) { _, newValue in
-                switch newValue {
-                case .edge(let defaultEdgeWidth, let defaultStartThreshold, let defaultOpenCloseThreshold):
-                  edgeWidth = defaultEdgeWidth
-                  startThreshold = defaultStartThreshold
-                  openCloseThreshold = defaultOpenCloseThreshold
-                case .full(let defaultStartThreshold, let defaultOpenCloseThreshold):
-                  startThreshold = defaultStartThreshold
-                  openCloseThreshold = defaultOpenCloseThreshold
-                }
-              }
-              PreviewValueSlider(
-                title: "Edge Width",
-                value: $edgeWidth,
-                range: 0...80,
-                step: 2
-              )
-              .disabled(!isEdgeDragActivation)
-              PreviewValueSlider(
-                title: "Drag Start",
-                value: $startThreshold,
-                range: 0...20,
-                step: 1
-              )
-              PreviewValueSlider(
-                title: "Open/Close",
-                value: $openCloseThreshold,
-                range: 20...120,
-                step: 5
-              )
-              Picker("Haptic", selection: $configuration.hapticStyle) {
-                Text("None").tag(nil as UIImpactFeedbackGenerator.FeedbackStyle?)
-                Text("Light").tag(UIImpactFeedbackGenerator.FeedbackStyle.light as UIImpactFeedbackGenerator.FeedbackStyle?)
-                Text("Medium").tag(UIImpactFeedbackGenerator.FeedbackStyle.medium as UIImpactFeedbackGenerator.FeedbackStyle?)
-                Text("Heavy").tag(UIImpactFeedbackGenerator.FeedbackStyle.heavy as UIImpactFeedbackGenerator.FeedbackStyle?)
-                Text("Soft").tag(UIImpactFeedbackGenerator.FeedbackStyle.soft as UIImpactFeedbackGenerator.FeedbackStyle?)
-                Text("Rigid").tag(UIImpactFeedbackGenerator.FeedbackStyle.rigid as UIImpactFeedbackGenerator.FeedbackStyle?)
-              }
-              Picker("Style", selection: $configuration.menuStyle) {
-                Text("Slide In Over").tag(MenuStyle.slideInOver())
-                Text("Slide In Out").tag(MenuStyle.slideInOut())
-              }
-              .onChange(of: configuration.menuStyle) { _, newValue in
-                switch newValue {
-                case .slideInOver(let defaultBlur, let defaultScale, let defaultDimValue):
-                  blur = defaultBlur
-                  scale = defaultScale
-                  dimValue = defaultDimValue
-                case .slideInOut(let defaultDimValue):
-                  dimValue = defaultDimValue
-                }
-              }
-              Picker("Animation", selection: $animationStyle) {
-                ForEach(PreviewAnimationStyle.allCases) { style in
-                  Text(style.rawValue).tag(style)
-                }
-              }
-              .textCase(nil)
-              PreviewValueSlider(
-                title: "Duration",
-                value: $animationDuration,
-                range: 0.15...1.0,
-                step: 0.05
-              )
-              PreviewValueSlider(
-                title: "Bounce",
-                value: $animationBounce,
-                range: 0...0.9,
-                step: 0.05
-              )
-              .disabled(animationStyle == .easeInOut)
-              PreviewValueSlider(
-                title: "Menu Width",
-                value: $configuration.menuWidth.asDouble(),
-                range: 0.3...0.9,
-                step: 0.05
-              )
-              PreviewValueSlider(
-                title: "Blur",
-                value: $blur,
-                range: 0...10,
-                step: 0.5
-              )
-              PreviewValueSlider(
-                title: "Scale",
-                value: $scale,
-                range: 0.8...1.0,
-                step: 0.02
-              )
-              PreviewValueSlider(
-                title: "Dim",
-                value: $dimValue,
-                range: 0...0.6,
-                step: 0.05
-              )
-            }
-
+            .padding()
           }
-          .navigationTitle(Text("Menu"))
-        }
-      }
-    } mainView: {
-      NavigationStack {
-        ScrollView {
-          VStack(spacing: 4) {
-            ForEach(0..<30) { index in
+          .navigationTitle("Home")
+          .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
               Button {
-                print("Tap \(index)")
-                showDetail = true
-              } label: {
-                HStack {
-                  Text("Row \(index)")
-                  Spacer()
-                  Image(systemName: "chevron.right")
+                withAnimation {
+                  model.toggle()
                 }
-                .padding()
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .contentShape(Rectangle())
-              }
-              .buttonStyle(.plain)
-            }
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 24)
-        }
-        .navigationTitle(Text("Room: \(selectedMenu.rawValue)"))
-        .toolbar {
-          ToolbarItem(placement: .topBarLeading) {
-            Button("", systemImage: "line.3.horizontal") {
-              withAnimation(menuAnimation) {
-                model.toggle()
+              } label: {
+                Image(systemName: "line.3.horizontal")
               }
             }
           }
         }
-        .sheet(isPresented: $showDetail) {
-          Text("Detail")
-        }
       }
     }
   }
-}
 
-private struct PreviewValueSlider: View {
-  let title: String
-  @Binding var value: Double
-  let range: ClosedRange<Double>
-  let step: Double
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack {
-        Text(title)
-        Spacer()
-        Text(value, format: .number.precision(.fractionLength(2)))
-          .foregroundStyle(.secondary)
-      }
-      Slider(value: $value, in: range, step: step)
-    }
-  }
-}
-
-private extension Binding where Value == CGFloat {
-  func asDouble() -> Binding<Double> {
-    Binding<Double>(
-      get: { Double(wrappedValue) },
-      set: { wrappedValue = CGFloat($0) }
-    )
-  }
+  return MinimalExample()
 }
