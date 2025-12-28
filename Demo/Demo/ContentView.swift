@@ -18,7 +18,7 @@ struct ContentView: View {
   @State private var edgeWidth: Double = 24
   @State private var startThreshold: Double = 6
   @State private var openCloseThreshold: Double = 50
-  
+
   private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
   
   private var menuStyle: SideMenu.MenuStyle {
