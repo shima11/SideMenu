@@ -119,6 +119,10 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   }
 }
 
+private enum SideMenuLayoutConstants {
+  static let minimumWidth: CGFloat = 1
+}
+
 /// A customizable side menu component with gesture support and accessibility features.
 ///
 /// `SideMenuView` provides a sliding side menu with extensive customization options,
@@ -199,164 +203,41 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   // MARK: - Body
 
   public var body: some View {
-    return GeometryReader { proxy in
-      let screenWidth = max(proxy.size.width, 1)
-      let menuWidthPoints = screenWidth * configuration.menuWidth
+    GeometryReader { proxy in
+      menuContent(screenWidth: max(proxy.size.width, SideMenuLayoutConstants.minimumWidth))
+    }
+  }
 
-      // Extract drag activation parameters
-      let dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat) = {
-        switch configuration.dragActivation {
-        case .edge(let edgeWidth, let startThreshold, let openCloseThreshold):
-          return (true, max(edgeWidth, 0), max(startThreshold, 0), max(openCloseThreshold, 0))
-        case .full(let startThreshold, let openCloseThreshold):
-          return (false, 0, max(startThreshold, 0), max(openCloseThreshold, 0))
-        }
-      }()
+  // MARK: - Private Methods
 
-      let dragGesture = DragGesture()
-        .onChanged { value in
-          let horizontal = abs(value.translation.width)
-          let vertical = abs(value.translation.height)
-          let isEdgeOnly = dragParams.isEdgeOnly
-          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth
+  @ViewBuilder
+  private func menuContent(screenWidth: CGFloat) -> some View {
+    let menuWidthPoints = screenWidth * configuration.menuWidth
+    let dragParams = extractDragParams()
+    let styleParams = extractStyleParams()
+    let calcOffset = calculateOffset(menuWidth: menuWidthPoints)
 
-          if isOpeningFromEdge {
-            if isMenuDragging {
-              isMenuDragging = false
-            }
-            return
-          }
-          guard horizontal > vertical else {
-            if isMenuDragging {
-              isMenuDragging = false
-            }
-            return
-          }
-          guard horizontal <= menuWidthPoints else { return }
-          guard !(model.currentState == .closed && value.translation.width < 0) else { return }
-          if horizontal > dragParams.startThreshold && !isMenuDragging {
-            isMenuDragging = true
-          }
-          if model.currentState == .open && value.translation.width > 0 {
-            withTransaction(Transaction(animation: nil)) {
-              model.setDragOffset(SideMenuState.edgeBounceResistance)
-            }
-            return
-          }
-          withTransaction(Transaction(animation: nil)) {
-            model.setDragOffset(Float(value.translation.width))
-          }
-        }
-        .onEnded { value in
-          let isEdgeOnly = dragParams.isEdgeOnly
-          let isOpeningFromEdge = isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth
-          if isOpeningFromEdge {
-            if isMenuDragging {
-              isMenuDragging = false
-            }
-            withTransaction(Transaction(animation: configuration.menuAnimation)) {
-              model.resetDragOffset()
-            }
-            return
-          }
-          if isMenuDragging {
-            isMenuDragging = false
-          }
-          let shouldClose = value.translation.width < -dragParams.openCloseThreshold
-          let shouldOpen = value.translation.width > dragParams.openCloseThreshold
-          let startingState = model.currentState
-
-          withTransaction(Transaction(animation: configuration.menuAnimation)) {
-            model.resetDragOffset()
-            if shouldClose {
-              model.close()
-            }
-            if shouldOpen {
-              model.open()
-            }
-          }
-
-          let didClose = startingState == .open && shouldClose
-          let didOpen = startingState == .closed && shouldOpen
-          if didClose || didOpen {
-            hapticGenerator?.impactOccurred()
-          }
-        }
-
-      // Calculate offset (currently only supports leading edge)
-      let baseOffset = -(menuWidthPoints * CGFloat(model.currentState == .open ? 0 : 1))
-      let calcOffset = baseOffset + CGFloat(model.dragOffset)
-
-      // Extract style-specific parameters
-      let styleParams: (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat) = {
-        switch configuration.menuStyle {
-        case .slideInOver(let blur, let scale, let dimValue):
-          return (true, max(blur, 0), min(max(scale, 0), 1), min(max(dimValue, 0), 1))
-        case .slideInOut(let dimValue):
-          return (false, 0, 1, min(max(dimValue, 0), 1))
-        }
-      }()
-
-      HStack (spacing: 0) {
-        if styleParams.isSlideInOver {
-          ZStack(alignment: .leading) {
-            mainView
-              .blur(radius: model.calculateBlur(maxValue: styleParams.blur, totalWidth: screenWidth))
-              .scaleEffect(model.calculateScale(minScale: styleParams.scale, totalWidth: screenWidth))
-              .frame(width: screenWidth)
-              .disabled(isMenuDragging)
-              .allowsHitTesting(!isMenuDragging)
-              .accessibilityFocused($focusTarget, equals: .main)
-              .accessibilityHidden(isMenuOpen)
-
-            Color.clear
-              .frame(maxWidth: .infinity,  maxHeight: .infinity)
-              .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: styleParams.dimValue, totalWidth: screenWidth))))
-              .allowsHitTesting(isMenuOpen)
-              .onTapGesture {
-                if model.isOpen {
-                  withAnimation(configuration.menuAnimation) { model.close() }
-                }
-              }
-
-            sideMenu
-              .frame(width: menuWidthPoints)
-              .offset(x: calcOffset, y: 0)
-              .accessibilityFocused($focusTarget, equals: .menu)
-              .accessibilityHidden(!isMenuOpen)
-              .accessibilityAddTraits(isMenuOpen ? .isModal : [])
-          }
-
-        } else {
-            sideMenu
-              .frame(width: menuWidthPoints)
-              .offset(x: calcOffset, y: 0)
-              .accessibilityFocused($focusTarget, equals: .menu)
-              .accessibilityHidden(!isMenuOpen)
-
-            ZStack {
-              mainView
-                .frame(width: screenWidth)
-                .offset(x: calcOffset, y: 0)
-                .disabled(isMenuDragging)
-                .allowsHitTesting(!isMenuDragging)
-                .accessibilityFocused($focusTarget, equals: .main)
-
-              Color.clear
-                .frame(maxWidth: .infinity,  maxHeight: .infinity)
-                .overlay(Color.black.opacity(Double(model.calculateBlur(maxValue: styleParams.dimValue, totalWidth: screenWidth))))
-                .offset(x: calcOffset, y: 0)
-                .allowsHitTesting(isMenuOpen)
-                .onTapGesture {
-                  if model.isOpen {
-                    withAnimation(configuration.menuAnimation) { model.close() }
-                  }
-                }
-            }
-          }
+    HStack(spacing: 0) {
+      if styleParams.isSlideInOver {
+        slideInOverLayout(
+          screenWidth: screenWidth,
+          menuWidthPoints: menuWidthPoints,
+          styleParams: styleParams,
+          calcOffset: calcOffset
+        )
+      } else {
+        slideInOutLayout(
+          screenWidth: screenWidth,
+          menuWidthPoints: menuWidthPoints,
+          styleParams: styleParams,
+          calcOffset: calcOffset
+        )
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .simultaneousGesture(dragGesture)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    .simultaneousGesture(
+      createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams)
+    )
     .accessibilityAction(.escape) {
       guard isMenuOpen else { return }
       withAnimation(configuration.menuAnimation) {
@@ -373,15 +254,239 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       focusTarget = (newValue == .open) ? .menu : .main
     }
     .onAppear {
-      if let style = configuration.hapticStyle {
-        hapticGenerator = UIImpactFeedbackGenerator(style: style)
-        hapticGenerator?.prepare()
-      }
+      updateHapticGenerator()
+    }
+    .onChange(of: configuration.hapticStyle) { _, _ in
+      updateHapticGenerator()
     }
     .onDisappear {
       hapticGenerator = nil
     }
+  }
+
+  private func updateHapticGenerator() {
+    if let style = configuration.hapticStyle {
+      hapticGenerator = UIImpactFeedbackGenerator(style: style)
+      hapticGenerator?.prepare()
+    } else {
+      hapticGenerator = nil
     }
+  }
+
+  private func extractDragParams() -> (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat) {
+    switch configuration.dragActivation {
+    case .edge(let edgeWidth, let startThreshold, let openCloseThreshold):
+      return (true, max(edgeWidth, 0), max(startThreshold, 0), max(openCloseThreshold, 0))
+    case .full(let startThreshold, let openCloseThreshold):
+      return (false, 0, max(startThreshold, 0), max(openCloseThreshold, 0))
+    }
+  }
+
+  private func extractStyleParams() -> (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat) {
+    switch configuration.menuStyle {
+    case .slideInOver(let blur, let scale, let dimValue):
+      return (true, max(blur, 0), min(max(scale, 0), 1), min(max(dimValue, 0), 1))
+    case .slideInOut(let dimValue):
+      return (false, 0, 1, min(max(dimValue, 0), 1))
+    }
+  }
+
+  private func calculateOffset(menuWidth: CGFloat) -> CGFloat {
+    let baseOffset = -(menuWidth * CGFloat(model.currentState == .open ? 0 : 1))
+    return baseOffset + CGFloat(model.dragOffset)
+  }
+
+  private func createDragGesture(
+    menuWidth: CGFloat,
+    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat)
+  ) -> some Gesture {
+    DragGesture()
+      .onChanged { value in
+        handleDragChanged(value: value, menuWidth: menuWidth, dragParams: dragParams)
+      }
+      .onEnded { value in
+        handleDragEnded(value: value, dragParams: dragParams)
+      }
+  }
+
+  private func handleDragChanged(
+    value: DragGesture.Value,
+    menuWidth: CGFloat,
+    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat)
+  ) {
+    let horizontal = abs(value.translation.width)
+    let vertical = abs(value.translation.height)
+
+    // Edge-only activation check
+    if dragParams.isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth {
+      if isMenuDragging {
+        isMenuDragging = false
+      }
+      return
+    }
+
+    // Horizontal vs vertical gesture check
+    guard horizontal > vertical else {
+      if isMenuDragging {
+        isMenuDragging = false
+      }
+      return
+    }
+
+    // Width boundary check
+    guard horizontal <= menuWidth else { return }
+
+    // Prevent dragging closed menu to the left
+    guard !(model.currentState == .closed && value.translation.width < 0) else { return }
+
+    // Start dragging if threshold exceeded
+    if horizontal > dragParams.startThreshold && !isMenuDragging {
+      isMenuDragging = true
+    }
+
+    // Handle edge bounce when menu is open and dragging right
+    if model.currentState == .open && value.translation.width > 0 {
+      withTransaction(Transaction(animation: nil)) {
+        model.setDragOffset(SideMenuState.edgeBounceResistance)
+      }
+      return
+    }
+
+    // Update drag offset
+    withTransaction(Transaction(animation: nil)) {
+      model.setDragOffset(Float(value.translation.width))
+    }
+  }
+
+  private func handleDragEnded(
+    value: DragGesture.Value,
+    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat)
+  ) {
+    // Edge-only activation check
+    if dragParams.isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth {
+      if isMenuDragging {
+        isMenuDragging = false
+      }
+      withTransaction(Transaction(animation: configuration.menuAnimation)) {
+        model.resetDragOffset()
+      }
+      return
+    }
+
+    if isMenuDragging {
+      isMenuDragging = false
+    }
+
+    let shouldClose = value.translation.width < -dragParams.openCloseThreshold
+    let shouldOpen = value.translation.width > dragParams.openCloseThreshold
+    let startingState = model.currentState
+
+    withTransaction(Transaction(animation: configuration.menuAnimation)) {
+      model.resetDragOffset()
+      if shouldClose {
+        model.close()
+      }
+      if shouldOpen {
+        model.open()
+      }
+    }
+
+    // Trigger haptic feedback if state changed
+    let didClose = startingState == .open && shouldClose
+    let didOpen = startingState == .closed && shouldOpen
+    if didClose || didOpen {
+      hapticGenerator?.impactOccurred()
+    }
+  }
+
+  @ViewBuilder
+  private func slideInOverLayout(
+    screenWidth: CGFloat,
+    menuWidthPoints: CGFloat,
+    styleParams: (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat),
+    calcOffset: CGFloat
+  ) -> some View {
+    ZStack(alignment: .leading) {
+      mainViewWithEffects(
+        screenWidth: screenWidth,
+        blur: styleParams.blur,
+        scale: styleParams.scale,
+        offset: 0
+      )
+
+      dimOverlay(dimValue: styleParams.dimValue, screenWidth: screenWidth, offset: 0)
+
+      sideMenuView(width: menuWidthPoints, offset: calcOffset)
+    }
+  }
+
+  @ViewBuilder
+  private func slideInOutLayout(
+    screenWidth: CGFloat,
+    menuWidthPoints: CGFloat,
+    styleParams: (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat),
+    calcOffset: CGFloat
+  ) -> some View {
+    sideMenuView(width: menuWidthPoints, offset: calcOffset)
+
+    ZStack {
+      mainViewWithEffects(
+        screenWidth: screenWidth,
+        blur: 0,
+        scale: 1,
+        offset: calcOffset
+      )
+
+      dimOverlay(dimValue: styleParams.dimValue, screenWidth: screenWidth, offset: calcOffset)
+    }
+  }
+
+  @ViewBuilder
+  private func mainViewWithEffects(
+    screenWidth: CGFloat,
+    blur: CGFloat,
+    scale: CGFloat,
+    offset: CGFloat
+  ) -> some View {
+    mainView
+      .blur(radius: model.calculateBlur(maxValue: blur, totalWidth: screenWidth))
+      .scaleEffect(model.calculateScale(minScale: scale, totalWidth: screenWidth))
+      .frame(width: screenWidth)
+      .offset(x: offset, y: 0)
+      .disabled(isMenuDragging)
+      .allowsHitTesting(!isMenuDragging)
+      .accessibilityFocused($focusTarget, equals: .main)
+      .accessibilityHidden(isMenuOpen && offset == 0)
+  }
+
+  @ViewBuilder
+  private func dimOverlay(dimValue: CGFloat, screenWidth: CGFloat, offset: CGFloat) -> some View {
+    Color.clear
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .overlay(
+        Color.black.opacity(
+          Double(model.calculateProgress(totalWidth: screenWidth) * dimValue)
+        )
+      )
+      .offset(x: offset, y: 0)
+      .allowsHitTesting(isMenuOpen)
+      .onTapGesture {
+        if model.isOpen {
+          withAnimation(configuration.menuAnimation) { model.close() }
+        }
+      }
+      .accessibilityLabel("Close menu")
+      .accessibilityHint("Double tap to close the side menu")
+  }
+
+  @ViewBuilder
+  private func sideMenuView(width: CGFloat, offset: CGFloat) -> some View {
+    sideMenu
+      .frame(width: width)
+      .offset(x: offset, y: 0)
+      .accessibilityFocused($focusTarget, equals: .menu)
+      .accessibilityHidden(!isMenuOpen)
+      .accessibilityAddTraits(isMenuOpen ? .isModal : [])
   }
 }
 

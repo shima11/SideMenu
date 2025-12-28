@@ -19,6 +19,9 @@ public final class SideMenuState {
 
     /// Resistance when dragging past menu edge
     static let edgeBounceResistance: Float = 2.0
+
+    /// Minimum width value to prevent division by zero
+    static let minimumWidth: CGFloat = 1.0
   }
 
   // MARK: - Public Properties
@@ -76,21 +79,31 @@ public final class SideMenuState {
 
   // MARK: - Animation Calculations
 
+  /// Calculates normalized progress based on current drag state and width.
+  /// - Parameters:
+  ///   - totalWidth: The total width of the screen
+  ///   - dampingFactor: Factor to adjust the sensitivity of the calculation
+  /// - Returns: The normalized progress value
+  private func calculateNormalizedProgress(totalWidth: CGFloat, dampingFactor: CGFloat) -> CGFloat {
+    let normalizedWidth = max(totalWidth, AnimationConstants.minimumWidth) / dampingFactor
+    return CGFloat(dragOffset) / normalizedWidth
+  }
+
   /// Calculates the scale effect for the main view based on drag progress.
   /// - Parameters:
   ///   - minScale: Target scale when menu is fully open (0.0 to 1.0)
   ///   - totalWidth: The total width of the screen
   /// - Returns: The calculated scale value
   public func calculateScale(minScale: CGFloat, totalWidth: CGFloat) -> CGFloat {
-    let normalizedWidth = max(totalWidth, 1) * AnimationConstants.scaleDampingFactor
-    let currentWidth = self.dragOffset
+    let progress = calculateNormalizedProgress(
+      totalWidth: totalWidth,
+      dampingFactor: AnimationConstants.scaleDampingFactor
+    )
 
     let defaultScale: CGFloat = 1.0
     let targetScale: CGFloat = minScale
 
-    let scaleProgress = CGFloat(currentWidth) * defaultScale / normalizedWidth
-
-    if scaleProgress == 0 {
+    if progress == 0 {
       return currentState == .open ? targetScale : defaultScale
     }
 
@@ -98,13 +111,11 @@ public final class SideMenuState {
       if dragOffset > 0 {
         return targetScale
       } else {
-        let scale = targetScale + abs(scaleProgress)
-        return min(scale, defaultScale)
+        return min(targetScale + abs(progress), defaultScale)
       }
     } else {
       if dragOffset > 0 {
-        let scale = defaultScale - abs(scaleProgress)
-        return max(scale, targetScale)
+        return max(defaultScale - abs(progress), targetScale)
       } else {
         return defaultScale
       }
@@ -117,15 +128,15 @@ public final class SideMenuState {
   ///   - totalWidth: The total width of the screen
   /// - Returns: The calculated blur radius
   public func calculateBlur(maxValue: CGFloat, totalWidth: CGFloat) -> CGFloat {
-    let normalizedWidth = max(totalWidth, 1) / AnimationConstants.blurDampingFactor
-    let currentWidth = self.dragOffset
+    let progress = calculateNormalizedProgress(
+      totalWidth: totalWidth,
+      dampingFactor: AnimationConstants.blurDampingFactor
+    ) * maxValue
 
     let maxBlur: CGFloat = maxValue
     let minBlur: CGFloat = 0
 
-    let blurProgress = CGFloat(currentWidth) * maxValue / normalizedWidth
-
-    if blurProgress == 0 {
+    if progress == 0 {
       return currentState == .open ? maxBlur : minBlur
     }
 
@@ -133,15 +144,45 @@ public final class SideMenuState {
       if dragOffset > 0 {
         return maxBlur
       } else {
-        let blur = maxBlur - abs(blurProgress)
-        return max(blur, minBlur)
+        return max(maxBlur - abs(progress), minBlur)
       }
     } else {
       if dragOffset > 0 {
-        let blur = minBlur + abs(blurProgress)
-        return min(blur, maxBlur)
+        return min(minBlur + abs(progress), maxBlur)
       } else {
         return minBlur
+      }
+    }
+  }
+
+  /// Calculates the animation progress (0.0 to 1.0) based on drag state.
+  ///
+  /// This method is designed for calculating opacity and other linear progress values,
+  /// providing a normalized progress value from 0.0 (closed) to 1.0 (open).
+  ///
+  /// - Parameter totalWidth: The total width of the screen
+  /// - Returns: The progress value from 0.0 (closed) to 1.0 (open)
+  public func calculateProgress(totalWidth: CGFloat) -> CGFloat {
+    let normalizedWidth = max(totalWidth, AnimationConstants.minimumWidth)
+    let progress = CGFloat(dragOffset) / normalizedWidth
+
+    if progress == 0 {
+      return currentState == .open ? 1.0 : 0.0
+    }
+
+    if currentState == .open {
+      if dragOffset > 0 {
+        return 1.0
+      } else {
+        let value = 1.0 - abs(progress)
+        return max(value, 0.0)
+      }
+    } else {
+      if dragOffset > 0 {
+        let value = abs(progress)
+        return min(value, 1.0)
+      } else {
+        return 0.0
       }
     }
   }
