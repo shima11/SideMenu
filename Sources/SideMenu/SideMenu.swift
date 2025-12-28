@@ -496,17 +496,13 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
     var body: some View {
       SideMenuView(
-        model: model,
-        configuration: SideMenuConfiguration(
-          menuStyle: .slideInOver(),
-          dragActivation: .full()
-        )
+        model: model
       ) {
         List {
           Section("Menu") {
-            Button("Home") { model.close() }
-            Button("Settings") { model.close() }
-            Button("Profile") { model.close() }
+            Button("Home") { withAnimation { model.close() } }
+            Button("Settings") { withAnimation { model.close() } }
+            Button("Profile") { withAnimation { model.close() } }
           }
         }
       } mainView: {
@@ -527,9 +523,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           .toolbar {
             ToolbarItem(placement: .topBarLeading) {
               Button {
-                withAnimation {
-                  model.toggle()
-                }
+                withAnimation { model.toggle() }
               } label: {
                 Image(systemName: "line.3.horizontal")
               }

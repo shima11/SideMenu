@@ -7,19 +7,19 @@ struct ContentView: View {
   @State private var selectedRoom: String = "Room 1"
   @State private var configuration = SideMenuConfiguration()
   @State private var showDetail = false
-
+  
   // Style-specific parameters
   @State private var blur: Double = 2
   @State private var scale: Double = 1
   @State private var dimValue: Double = 0.2
-
+  
   // Drag activation parameters
   @State private var edgeWidth: Double = 24
   @State private var startThreshold: Double = 6
   @State private var openCloseThreshold: Double = 50
-
+  
   private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
-
+  
   private var menuStyle: SideMenu.MenuStyle {
     switch configuration.menuStyle {
     case .slideInOver:
@@ -28,7 +28,7 @@ struct ContentView: View {
       return .slideInOut(dimValue: dimValue)
     }
   }
-
+  
   private var dragActivation: MenuDragActivation {
     switch configuration.dragActivation {
     case .edge:
@@ -37,7 +37,7 @@ struct ContentView: View {
       return .full(startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
     }
   }
-
+  
   var body: some View {
     SideMenuView(
       model: menuState,
@@ -91,7 +91,7 @@ struct ContentView: View {
                 dimValue = defaultDimValue
               }
             }
-
+            
             Picker("Drag Activation", selection: $configuration.dragActivation) {
               Text("Full Screen").tag(MenuDragActivation.full())
               Text("Edge Only").tag(MenuDragActivation.edge())
@@ -107,7 +107,7 @@ struct ContentView: View {
                 openCloseThreshold = defaultOpenCloseThreshold
               }
             }
-
+            
             Picker("Haptic", selection: $configuration.hapticStyle) {
               Text("None").tag(nil as UIImpactFeedbackGenerator.FeedbackStyle?)
               Text("Light").tag(UIImpactFeedbackGenerator.FeedbackStyle.light as UIImpactFeedbackGenerator.FeedbackStyle?)
@@ -134,7 +134,7 @@ struct ContentView: View {
               }
               Slider(value: $blur, in: 0...10, step: 0.5)
             }
-
+            
             VStack(alignment: .leading, spacing: 8) {
               HStack {
                 Text("Scale")
@@ -144,7 +144,7 @@ struct ContentView: View {
               }
               Slider(value: $scale, in: 0.8...1.0, step: 0.02)
             }
-
+            
             VStack(alignment: .leading, spacing: 8) {
               HStack {
                 Text("Dim Opacity")
