@@ -27,6 +27,8 @@ struct ContentView: View {
       return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)
     case .slideInOut:
       return .slideInOut(dimValue: dimValue)
+    case .slideOut:
+      return .slideOut(scale: scale, dimValue: dimValue, backgroundColor: .systemBackground)
     }
   }
   
@@ -167,6 +169,7 @@ struct ContentView: View {
           Picker("Style", selection: $configuration.menuStyle) {
             Text("Slide In Over").tag(MenuStyle.slideInOver())
             Text("Slide In Out").tag(MenuStyle.slideInOut())
+            Text("Slide Out").tag(MenuStyle.slideOut())
           }
 
           // Blur (slideInOver only)
@@ -180,7 +183,20 @@ struct ContentView: View {
               }
               Slider(value: $blur, in: 0...10, step: 0.5)
             }
+          }
 
+          // Scale (slideInOver and slideOut)
+          if case .slideInOver = configuration.menuStyle {
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Scale")
+                Spacer()
+                Text(scale, format: .number.precision(.fractionLength(2)))
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $scale, in: 0.8...1.0, step: 0.02)
+            }
+          } else if case .slideOut = configuration.menuStyle {
             VStack(alignment: .leading, spacing: 8) {
               HStack {
                 Text("Scale")

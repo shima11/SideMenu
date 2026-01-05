@@ -122,6 +122,19 @@ public final class SideMenuState {
     }
   }
 
+  /// Calculates the scale effect for the side menu based on drag progress.
+  /// Unlike `calculateScale`, this starts small when closed and grows to 1.0 when open.
+  /// - Parameters:
+  ///   - minScale: The minimum scale when menu is closed (e.g., 0.9)
+  ///   - menuWidth: The width of the menu
+  /// - Returns: The calculated scale value
+  public func calculateMenuScale(minScale: CGFloat, menuWidth: CGFloat) -> CGFloat {
+    let progress = calculateProgress(menuWidth: menuWidth)
+    // progress: 0 (closed) -> 1 (open)
+    // scale: minScale (closed) -> 1.0 (open)
+    return minScale + (1.0 - minScale) * progress
+  }
+
   /// Calculates the blur effect for the main view based on drag progress.
   /// - Parameters:
   ///   - maxValue: Maximum blur radius when menu is fully open

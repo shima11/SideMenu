@@ -14,6 +14,14 @@ public enum MenuStyle: Equatable, Hashable, Sendable {
   /// - Parameters:
   ///   - dimValue: Opacity of the dim overlay (default: 0.2)
   case slideInOut(dimValue: CGFloat = 0.2)
+
+  /// Main content slides out to reveal the menu underneath (like Meta Threads).
+  /// Menu stays fixed in place while main content moves to expose it.
+  /// - Parameters:
+  ///   - scale: Minimum scale factor applied to side menu (default: 0.9)
+  ///   - dimValue: Opacity of the dim overlay (default: 0.2)
+  ///   - backgroundColor: Background color shown behind the menu during scale animation
+  case slideOut(scale: CGFloat = 0.9, dimValue: CGFloat = 0.2, backgroundColor: UIColor? = nil)
 }
 
 /// Defines which area of the screen can initiate a drag gesture to open the menu.
@@ -102,7 +110,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
   public init(
     menuWidth: CGFloat = 0.8,
-    menuStyle: MenuStyle = .slideInOut(),
+    menuStyle: MenuStyle = .slideOut(),
     menuAnimation: Animation = .easeOut(duration: 0.3),
     dragActivation: MenuDragActivation = .full(),
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
@@ -216,15 +224,23 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     let calcOffset = calculateOffset(menuWidth: menuWidthPoints)
 
     HStack(spacing: 0) {
-      if styleParams.isSlideInOver {
+      switch styleParams.styleType {
+      case .slideInOver:
         slideInOverLayout(
           screenWidth: screenWidth,
           menuWidthPoints: menuWidthPoints,
           styleParams: styleParams,
           calcOffset: calcOffset
         )
-      } else {
+      case .slideInOut:
         slideInOutLayout(
+          screenWidth: screenWidth,
+          menuWidthPoints: menuWidthPoints,
+          styleParams: styleParams,
+          calcOffset: calcOffset
+        )
+      case .slideOut:
+        slideOutLayout(
           screenWidth: screenWidth,
           menuWidthPoints: menuWidthPoints,
           styleParams: styleParams,
@@ -280,12 +296,20 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
   }
 
-  private func extractStyleParams() -> (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat) {
+  private enum StyleType {
+    case slideInOver
+    case slideInOut
+    case slideOut
+  }
+
+  private func extractStyleParams() -> (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?) {
     switch configuration.menuStyle {
     case .slideInOver(let blur, let scale, let dimValue):
-      return (true, max(blur, 0), min(max(scale, 0), 1), min(max(dimValue, 0), 1))
+      return (.slideInOver, max(blur, 0), min(max(scale, 0), 1), min(max(dimValue, 0), 1), nil)
     case .slideInOut(let dimValue):
-      return (false, 0, 1, min(max(dimValue, 0), 1))
+      return (.slideInOut, 0, 1, min(max(dimValue, 0), 1), nil)
+    case .slideOut(let scale, let dimValue, let backgroundColor):
+      return (.slideOut, 0, min(max(scale, 0), 1), min(max(dimValue, 0), 1), backgroundColor)
     }
   }
 
@@ -402,7 +426,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func slideInOverLayout(
     screenWidth: CGFloat,
     menuWidthPoints: CGFloat,
-    styleParams: (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat),
+    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
     calcOffset: CGFloat
   ) -> some View {
     ZStack(alignment: .leading) {
@@ -423,7 +447,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func slideInOutLayout(
     screenWidth: CGFloat,
     menuWidthPoints: CGFloat,
-    styleParams: (isSlideInOver: Bool, blur: CGFloat, scale: CGFloat, dimValue: CGFloat),
+    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
     calcOffset: CGFloat
   ) -> some View {
     sideMenuView(width: menuWidthPoints, offset: calcOffset)
@@ -437,6 +461,42 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       )
 
       dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset)
+    }
+  }
+
+  @ViewBuilder
+  private func slideOutLayout(
+    screenWidth: CGFloat,
+    menuWidthPoints: CGFloat,
+    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
+    calcOffset: CGFloat
+  ) -> some View {
+    // Menu is underneath, fixed in place
+    // MainView slides to reveal the menu
+    ZStack(alignment: .leading) {
+      // Background to prevent gaps when scaling
+      if let backgroundColor = styleParams.backgroundColor {
+        Color(uiColor: backgroundColor)
+          .frame(width: menuWidthPoints)
+          .ignoresSafeArea()
+      }
+      
+      sideMenuView(width: menuWidthPoints, offset: 0)
+        .scaleEffect(
+          model.calculateMenuScale(minScale: styleParams.scale, menuWidth: menuWidthPoints),
+          anchor: .trailing
+        )
+
+      ZStack {
+        mainViewWithEffects(
+          screenWidth: screenWidth,
+          blur: 0,
+          scale: 1,
+          offset: calcOffset + menuWidthPoints
+        )
+
+        dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset + menuWidthPoints)
+      }
     }
   }
 
@@ -490,48 +550,44 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 }
 
 #Preview {
-  struct MinimalExample: View {
-    @State private var model = SideMenuState()
-
-    var body: some View {
-      SideMenuView(
-        model: model
-      ) {
-        List {
-          Section("Menu") {
-            Button("Home") { withAnimation { model.close() } }
-            Button("Settings") { withAnimation { model.close() } }
-            Button("Profile") { withAnimation { model.close() } }
+  
+  @Previewable @State var model = SideMenuState()
+  
+  SideMenuView(
+    model: model,
+    configuration: .init(menuStyle: .slideOut(scale: 0.8, dimValue: 0.5, backgroundColor: .secondarySystemBackground))
+  ) {
+    List {
+      Section("Menu") {
+        Button("Home") { withAnimation { model.close() } }
+        Button("Settings") { withAnimation { model.close() } }
+        Button("Profile") { withAnimation { model.close() } }
+      }
+    }
+  } mainView: {
+    NavigationStack {
+      ScrollView {
+        VStack(spacing: 12) {
+          ForEach(0..<20) { index in
+            Text("Item \(index + 1)")
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding()
+              .background(Color(uiColor: .secondarySystemBackground))
+              .clipShape(RoundedRectangle(cornerRadius: 8))
           }
         }
-      } mainView: {
-        NavigationStack {
-          ScrollView {
-            VStack(spacing: 12) {
-              ForEach(0..<20) { index in
-                Text("Item \(index + 1)")
-                  .frame(maxWidth: .infinity, alignment: .leading)
-                  .padding()
-                  .background(Color(uiColor: .secondarySystemBackground))
-                  .clipShape(RoundedRectangle(cornerRadius: 8))
-              }
-            }
-            .padding()
-          }
-          .navigationTitle("Home")
-          .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-              Button {
-                withAnimation { model.toggle() }
-              } label: {
-                Image(systemName: "line.3.horizontal")
-              }
-            }
+        .padding()
+      }
+      .navigationTitle("Home")
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            withAnimation { model.toggle() }
+          } label: {
+            Image(systemName: "line.3.horizontal")
           }
         }
       }
     }
   }
-
-  return MinimalExample()
 }
