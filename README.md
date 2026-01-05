@@ -94,6 +94,8 @@ struct MainContentView: View {
 }
 ```
 
+For a complete interactive example with all configuration options, check out the `Demo` app in the repository.
+
 ## Advanced Usage
 
 ### Custom Configuration
@@ -179,39 +181,6 @@ SideMenu includes comprehensive accessibility support:
 - **Escape Action** - VoiceOver users can close the menu with escape gesture
 - **Modal Trait** - Menu is announced as modal when open
 - **Focus Management** - Automatic focus transfer when menu opens/closes
-
-## Examples
-
-Check out the `SideMenuPreview` in the source code for an interactive example with all configuration options.
-
-## Roadmap
-
-### Planned Features
-
-- **Trailing Edge Support** - Menu from the right side (currently only leading/left edge is supported)
-- **SwiftUI Navigation Integration** - Better integration with NavigationStack
-- **Custom Transitions** - Support for custom animation transitions
-- **Multi-level Menus** - Support for nested menu structures
-
-## Migration from UIStateModel
-
-If you're upgrading from an older version:
-
-```swift
-// Old API (deprecated)
-let model = UIStateModel()
-model.openMenu()
-model.closeMenu()
-model.activeScreen == .menu
-
-// New API
-let model = SideMenuState()
-model.open()
-model.close()
-model.isOpen
-```
-
-All old APIs are still available but deprecated with helpful migration messages.
 
 ## Contributing
 
