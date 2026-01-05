@@ -4,7 +4,7 @@ A highly customizable, gesture-driven side menu component for SwiftUI with full 
 
 <p align="center">
   <img src="https://img.shields.io/badge/iOS-17.0+-blue.svg" alt="iOS 17.0+">
-  <img src="https://img.shields.io/badge/Swift-5.9+-orange.svg" alt="Swift 5.9+">
+  <img src="https://img.shields.io/badge/Swift-6.0+-orange.svg" alt="Swift 6.0+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License">
 </p>
 
@@ -22,8 +22,8 @@ A highly customizable, gesture-driven side menu component for SwiftUI with full 
 ## Requirements
 
 - iOS 17.0+
-- Swift 5.9+
-- Xcode 15.0+
+- Swift 6.0+
+- Xcode 16.0+
 
 ## Installation
 
