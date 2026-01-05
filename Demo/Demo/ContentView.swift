@@ -28,7 +28,7 @@ struct ContentView: View {
     case .slideInOut:
       return .slideInOut(dimValue: dimValue)
     case .slideOut:
-      return .slideOut(scale: scale, dimValue: dimValue, backgroundColor: .systemBackground)
+      return .slideOut(scale: scale, dimValue: dimValue, backgroundColor: .secondarySystemBackground)
     case .custom:
       return configuration.menuStyle
     }
@@ -122,6 +122,7 @@ struct ContentView: View {
         .padding(.vertical, 8)
       }
       .navigationTitle(selectedRoom)
+      .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
