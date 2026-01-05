@@ -29,6 +29,8 @@ struct ContentView: View {
       return .slideInOut(dimValue: dimValue)
     case .slideOut:
       return .slideOut(scale: scale, dimValue: dimValue, backgroundColor: .systemBackground)
+    case .custom:
+      return configuration.menuStyle
     }
   }
   

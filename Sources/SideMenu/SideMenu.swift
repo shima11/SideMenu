@@ -1,8 +1,29 @@
 
 import SwiftUI
 
+/// Context information passed to custom layout closures.
+public struct CustomLayoutContext: Sendable {
+  /// The total width of the screen.
+  public let screenWidth: CGFloat
+
+  /// The width of the side menu.
+  public let menuWidth: CGFloat
+
+  /// The current offset value based on drag and open/close state.
+  public let offset: CGFloat
+
+  /// The progress of the menu animation (0 = closed, 1 = open).
+  public let progress: CGFloat
+
+  /// Whether the menu is currently open.
+  public let isOpen: Bool
+
+  /// Whether the user is currently dragging.
+  public let isDragging: Bool
+}
+
 /// Visual presentation style for the side menu.
-public enum MenuStyle: Equatable, Hashable, Sendable {
+public enum MenuStyle: Sendable {
   /// Menu slides over the main content, which remains in place.
   /// - Parameters:
   ///   - blur: Maximum blur radius applied to main content (default: 2.0)
@@ -22,6 +43,59 @@ public enum MenuStyle: Equatable, Hashable, Sendable {
   ///   - dimValue: Opacity of the dim overlay (default: 0.2)
   ///   - backgroundColor: Background color shown behind the menu during scale animation
   case slideOut(scale: CGFloat = 0.9, dimValue: CGFloat = 0.2, backgroundColor: UIColor? = nil)
+
+  /// Custom layout with user-defined closures for side menu and main view.
+  /// - Parameters:
+  ///   - dimValue: Opacity of the dim overlay (default: 0.2)
+  ///   - sideMenuLayout: Closure to customize the side menu layout
+  ///   - mainViewLayout: Closure to customize the main view layout
+  case custom(
+    dimValue: CGFloat = 0.2,
+    sideMenuLayout: @Sendable (CustomLayoutContext, AnyView) -> AnyView,
+    mainViewLayout: @Sendable (CustomLayoutContext, AnyView) -> AnyView
+  )
+}
+
+// MARK: - MenuStyle Equatable & Hashable
+
+extension MenuStyle: Equatable {
+  public static func == (lhs: MenuStyle, rhs: MenuStyle) -> Bool {
+    switch (lhs, rhs) {
+    case (.slideInOver(let b1, let s1, let d1), .slideInOver(let b2, let s2, let d2)):
+      return b1 == b2 && s1 == s2 && d1 == d2
+    case (.slideInOut(let d1), .slideInOut(let d2)):
+      return d1 == d2
+    case (.slideOut(let s1, let d1, let bg1), .slideOut(let s2, let d2, let bg2)):
+      return s1 == s2 && d1 == d2 && bg1 == bg2
+    case (.custom, .custom):
+      return false  // Closures cannot be compared
+    default:
+      return false
+    }
+  }
+}
+
+extension MenuStyle: Hashable {
+  public func hash(into hasher: inout Hasher) {
+    switch self {
+    case .slideInOver(let blur, let scale, let dim):
+      hasher.combine(0)
+      hasher.combine(blur)
+      hasher.combine(scale)
+      hasher.combine(dim)
+    case .slideInOut(let dim):
+      hasher.combine(1)
+      hasher.combine(dim)
+    case .slideOut(let scale, let dim, let bg):
+      hasher.combine(2)
+      hasher.combine(scale)
+      hasher.combine(dim)
+      hasher.combine(bg)
+    case .custom(let dim, _, _):
+      hasher.combine(3)
+      hasher.combine(dim)
+    }
+  }
 }
 
 /// Defines which area of the screen can initiate a drag gesture to open the menu.
@@ -246,6 +320,13 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           styleParams: styleParams,
           calcOffset: calcOffset
         )
+      case .custom:
+        customLayout(
+          screenWidth: screenWidth,
+          menuWidthPoints: menuWidthPoints,
+          styleParams: styleParams,
+          calcOffset: calcOffset
+        )
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -300,6 +381,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     case slideInOver
     case slideInOut
     case slideOut
+    case custom
   }
 
   private func extractStyleParams() -> (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?) {
@@ -310,6 +392,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       return (.slideInOut, 0, 1, min(max(dimValue, 0), 1), nil)
     case .slideOut(let scale, let dimValue, let backgroundColor):
       return (.slideOut, 0, min(max(scale, 0), 1), min(max(dimValue, 0), 1), backgroundColor)
+    case .custom(let dimValue, _, _):
+      return (.custom, 0, 1, min(max(dimValue, 0), 1), nil)
     }
   }
 
@@ -496,6 +580,31 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
         )
 
         dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset + menuWidthPoints)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func customLayout(
+    screenWidth: CGFloat,
+    menuWidthPoints: CGFloat,
+    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
+    calcOffset: CGFloat
+  ) -> some View {
+    if case .custom(_, let sideMenuLayout, let mainViewLayout) = configuration.menuStyle {
+      let context = CustomLayoutContext(
+        screenWidth: screenWidth,
+        menuWidth: menuWidthPoints,
+        offset: calcOffset,
+        progress: model.calculateProgress(menuWidth: menuWidthPoints),
+        isOpen: model.isOpen,
+        isDragging: isMenuDragging
+      )
+
+      ZStack(alignment: .leading) {
+        sideMenuLayout(context, AnyView(sideMenu.frame(width: menuWidthPoints)))
+        mainViewLayout(context, AnyView(mainView.frame(width: screenWidth)))
+        dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset)
       }
     }
   }
