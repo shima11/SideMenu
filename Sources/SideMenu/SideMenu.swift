@@ -333,18 +333,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     .simultaneousGesture(
       createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams)
     )
-    .accessibilityAction(.escape) {
-      guard isMenuOpen else { return }
-      withAnimation(configuration.menuAnimation) {
-        model.close()
-      }
-    }
-    .accessibilityAction(named: "Close Menu") {
-      guard isMenuOpen else { return }
-      withAnimation(configuration.menuAnimation) {
-        model.close()
-      }
-    }
+    .accessibilityAction(.escape, closeMenuWithAnimation)
+    .accessibilityAction(named: "Close Menu", closeMenuWithAnimation)
     .onChange(of: model.currentState) { _, newValue in
       focusTarget = (newValue == .open) ? .menu : .main
     }
@@ -359,6 +349,13 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
   }
 
+  private func closeMenuWithAnimation() {
+    guard isMenuOpen else { return }
+    withAnimation(configuration.menuAnimation) {
+      model.close()
+    }
+  }
+
   private func updateHapticGenerator() {
     if let style = configuration.hapticStyle {
       hapticGenerator = UIImpactFeedbackGenerator(style: style)
@@ -368,12 +365,33 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
   }
 
-  private func extractDragParams() -> (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat) {
+  private struct DragParams {
+    let isEdgeOnly: Bool
+    let edgeWidth: CGFloat
+    let startThreshold: CGFloat
+    let openCloseThreshold: CGFloat
+
+    func shouldIgnoreDrag(isMenuOpen: Bool, startLocationX: CGFloat) -> Bool {
+      isEdgeOnly && !isMenuOpen && startLocationX > edgeWidth
+    }
+  }
+
+  private func extractDragParams() -> DragParams {
     switch configuration.dragActivation {
     case .edge(let edgeWidth, let startThreshold, let openCloseThreshold):
-      return (true, max(edgeWidth, 0), max(startThreshold, 0), max(openCloseThreshold, 0))
+      return DragParams(
+        isEdgeOnly: true,
+        edgeWidth: max(edgeWidth, 0),
+        startThreshold: max(startThreshold, 0),
+        openCloseThreshold: max(openCloseThreshold, 0)
+      )
     case .full(let startThreshold, let openCloseThreshold):
-      return (false, 0, max(startThreshold, 0), max(openCloseThreshold, 0))
+      return DragParams(
+        isEdgeOnly: false,
+        edgeWidth: 0,
+        startThreshold: max(startThreshold, 0),
+        openCloseThreshold: max(openCloseThreshold, 0)
+      )
     }
   }
 
@@ -384,16 +402,48 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     case custom
   }
 
-  private func extractStyleParams() -> (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?) {
+  private struct StyleParams {
+    let styleType: StyleType
+    let blur: CGFloat
+    let scale: CGFloat
+    let dimValue: CGFloat
+    let backgroundColor: UIColor?
+  }
+
+  private func extractStyleParams() -> StyleParams {
     switch configuration.menuStyle {
     case .slideInOver(let blur, let scale, let dimValue):
-      return (.slideInOver, max(blur, 0), min(max(scale, 0), 1), min(max(dimValue, 0), 1), nil)
+      return StyleParams(
+        styleType: .slideInOver,
+        blur: max(blur, 0),
+        scale: min(max(scale, 0), 1),
+        dimValue: min(max(dimValue, 0), 1),
+        backgroundColor: nil
+      )
     case .slideInOut(let dimValue):
-      return (.slideInOut, 0, 1, min(max(dimValue, 0), 1), nil)
+      return StyleParams(
+        styleType: .slideInOut,
+        blur: 0,
+        scale: 1,
+        dimValue: min(max(dimValue, 0), 1),
+        backgroundColor: nil
+      )
     case .slideOut(let scale, let dimValue, let backgroundColor):
-      return (.slideOut, 0, min(max(scale, 0), 1), min(max(dimValue, 0), 1), backgroundColor)
+      return StyleParams(
+        styleType: .slideOut,
+        blur: 0,
+        scale: min(max(scale, 0), 1),
+        dimValue: min(max(dimValue, 0), 1),
+        backgroundColor: backgroundColor
+      )
     case .custom(let dimValue, _, _):
-      return (.custom, 0, 1, min(max(dimValue, 0), 1), nil)
+      return StyleParams(
+        styleType: .custom,
+        blur: 0,
+        scale: 1,
+        dimValue: min(max(dimValue, 0), 1),
+        backgroundColor: nil
+      )
     }
   }
 
@@ -404,7 +454,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   private func createDragGesture(
     menuWidth: CGFloat,
-    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat)
+    dragParams: DragParams
   ) -> some Gesture {
     DragGesture()
       .onChanged { value in
@@ -418,24 +468,20 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func handleDragChanged(
     value: DragGesture.Value,
     menuWidth: CGFloat,
-    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat)
+    dragParams: DragParams
   ) {
     let horizontal = abs(value.translation.width)
     let vertical = abs(value.translation.height)
 
     // Edge-only activation check
-    if dragParams.isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth {
-      if isMenuDragging {
-        isMenuDragging = false
-      }
+    if dragParams.shouldIgnoreDrag(isMenuOpen: isMenuOpen, startLocationX: value.startLocation.x) {
+      isMenuDragging = false
       return
     }
 
     // Horizontal vs vertical gesture check
     guard horizontal > vertical else {
-      if isMenuDragging {
-        isMenuDragging = false
-      }
+      isMenuDragging = false
       return
     }
 
@@ -466,23 +512,19 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   private func handleDragEnded(
     value: DragGesture.Value,
-    dragParams: (isEdgeOnly: Bool, edgeWidth: CGFloat, startThreshold: CGFloat, openCloseThreshold: CGFloat),
+    dragParams: DragParams,
     menuWidth: CGFloat
   ) {
     // Edge-only activation check
-    if dragParams.isEdgeOnly && !isMenuOpen && value.startLocation.x > dragParams.edgeWidth {
-      if isMenuDragging {
-        isMenuDragging = false
-      }
+    if dragParams.shouldIgnoreDrag(isMenuOpen: isMenuOpen, startLocationX: value.startLocation.x) {
+      isMenuDragging = false
       withTransaction(Transaction(animation: configuration.menuAnimation)) {
         model.resetDragOffset()
       }
       return
     }
 
-    if isMenuDragging {
-      isMenuDragging = false
-    }
+    isMenuDragging = false
 
     let shouldClose = value.translation.width < -dragParams.openCloseThreshold
     let shouldOpen = value.translation.width > dragParams.openCloseThreshold
@@ -510,7 +552,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func slideInOverLayout(
     screenWidth: CGFloat,
     menuWidthPoints: CGFloat,
-    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
+    styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
     ZStack(alignment: .leading) {
@@ -531,7 +573,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func slideInOutLayout(
     screenWidth: CGFloat,
     menuWidthPoints: CGFloat,
-    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
+    styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
     sideMenuView(width: menuWidthPoints, offset: calcOffset)
@@ -552,7 +594,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func slideOutLayout(
     screenWidth: CGFloat,
     menuWidthPoints: CGFloat,
-    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
+    styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
     // Menu is underneath, fixed in place
@@ -588,7 +630,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func customLayout(
     screenWidth: CGFloat,
     menuWidthPoints: CGFloat,
-    styleParams: (styleType: StyleType, blur: CGFloat, scale: CGFloat, dimValue: CGFloat, backgroundColor: UIColor?),
+    styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
     if case .custom(_, let sideMenuLayout, let mainViewLayout) = configuration.menuStyle {

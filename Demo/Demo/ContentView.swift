@@ -165,6 +165,18 @@ struct ContentView: View {
     }
   }
 
+  private var scaleSlider: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text("Scale")
+        Spacer()
+        Text(scale, format: .number.precision(.fractionLength(2)))
+          .foregroundStyle(.secondary)
+      }
+      Slider(value: $scale, in: 0.8...1.0, step: 0.02)
+    }
+  }
+
   private var settingsView: some View {
     NavigationStack {
       List {
@@ -190,25 +202,9 @@ struct ContentView: View {
 
           // Scale (slideInOver and slideOut)
           if case .slideInOver = configuration.menuStyle {
-            VStack(alignment: .leading, spacing: 8) {
-              HStack {
-                Text("Scale")
-                Spacer()
-                Text(scale, format: .number.precision(.fractionLength(2)))
-                  .foregroundStyle(.secondary)
-              }
-              Slider(value: $scale, in: 0.8...1.0, step: 0.02)
-            }
+            scaleSlider
           } else if case .slideOut = configuration.menuStyle {
-            VStack(alignment: .leading, spacing: 8) {
-              HStack {
-                Text("Scale")
-                Spacer()
-                Text(scale, format: .number.precision(.fractionLength(2)))
-                  .foregroundStyle(.secondary)
-              }
-              Slider(value: $scale, in: 0.8...1.0, step: 0.02)
-            }
+            scaleSlider
           }
 
           // Dim (both styles)
