@@ -332,7 +332,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .simultaneousGesture(
       createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams),
-      including: (dragParams.isEdgeOnly && !isMenuOpen) ? .none : .all
+      including: (!isMenuOpen && !dragParams.isEdgeOnly) ? .all : .none
     )
     .overlay(alignment: .leading) {
       if dragParams.isEdgeOnly && !isMenuOpen {
@@ -695,6 +695,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           withAnimation(configuration.menuAnimation) { model.close() }
         }
       }
+      .simultaneousGesture(
+        createDragGesture(menuWidth: menuWidth, dragParams: extractDragParams())
+      )
       .accessibilityLabel("Close menu")
       .accessibilityHint("Double tap to close the side menu")
   }
@@ -704,6 +707,10 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     sideMenu
       .frame(width: width)
       .offset(x: offset, y: 0)
+      .highPriorityGesture(
+        createDragGesture(menuWidth: width, dragParams: extractDragParams()),
+        including: isMenuOpen ? .all : .subviews
+      )
       .accessibilityFocused($focusTarget, equals: .menu)
       .accessibilityHidden(!isMenuOpen)
       .accessibilityAddTraits(isMenuOpen ? .isModal : [])
