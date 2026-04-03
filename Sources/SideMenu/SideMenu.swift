@@ -331,8 +331,18 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .simultaneousGesture(
-      createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams)
+      createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams),
+      including: (dragParams.isEdgeOnly && !isMenuOpen) ? .none : .all
     )
+    .overlay(alignment: .leading) {
+      if dragParams.isEdgeOnly && !isMenuOpen {
+        Color.clear
+          .frame(width: dragParams.edgeWidth)
+          .frame(maxHeight: .infinity)
+          .contentShape(Rectangle())
+          .gesture(createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams))
+      }
+    }
     .accessibilityAction(.escape, closeMenuWithAnimation)
     .accessibilityAction(named: "Close Menu", closeMenuWithAnimation)
     .onChange(of: model.currentState) { _, newValue in
