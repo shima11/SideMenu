@@ -32,14 +32,14 @@ A highly customizable, gesture-driven side menu component for SwiftUI with full 
 Add SideMenu to your project via Xcode:
 
 1. File > Add Package Dependencies...
-2. Enter the repository URL: `https://github.com/yourusername/SideMenu`
+2. Enter the repository URL: `https://github.com/shima11/SideMenu`
 3. Select the version you want to use
 
 Or add it to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/SideMenu", from: "1.0.0")
+    .package(url: "https://github.com/shima11/SideMenu", from: "1.0.0")
 ]
 ```
 
@@ -198,9 +198,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Credits
 
-Original implementation by [Moaz Ezz](https://github.com/moazezz) based on this [Medium article](https://medium.com/better-programming/sidemenu-using-swiftui-939a01c86ecd).
-
-## Acknowledgments
-
-- Inspired by various SwiftUI menu implementations
-- Built with ❤️ for the Swift community
+Implementation inspired by this [Medium article](https://medium.com/better-programming/sidemenu-using-swiftui-939a01c86ecd).
