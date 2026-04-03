@@ -39,7 +39,7 @@ Or add it to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/shima11/SideMenu", from: "1.0.0")
+    .package(url: "https://github.com/shima11/SideMenu", from: "0.1.0")
 ]
 ```
 
