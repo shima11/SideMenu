@@ -498,7 +498,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     menuWidth: CGFloat,
     dragParams: DragParams
   ) -> some Gesture {
-    DragGesture()
+    DragGesture(minimumDistance: dragParams.startThreshold)
       .onChanged { value in
         handleDragChanged(value: value, menuWidth: menuWidth, dragParams: dragParams)
       }
@@ -527,10 +527,13 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       return
     }
 
-    // Start dragging if threshold exceeded — cancel any in-progress animation
+    // Start dragging only after sufficient horizontal movement
     if horizontal > dragParams.startThreshold && !isMenuDragging {
       isMenuDragging = true
     }
+
+    // Ignore until dragging is confirmed
+    guard isMenuDragging else { return }
 
     // Rubber band: closed state dragging left
     if model.currentState == .closed && value.translation.width < 0 {
@@ -597,6 +600,14 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Edge-only activation check
     if dragParams.shouldIgnoreDrag(isMenuOpen: isMenuOpen, startLocationX: value.startLocation.x) {
       isMenuDragging = false
+      withTransaction(Transaction(animation: configuration.menuAnimation)) {
+        model.resetDragOffset()
+      }
+      return
+    }
+
+    // If drag was never confirmed as horizontal, just reset
+    if !isMenuDragging {
       withTransaction(Transaction(animation: configuration.menuAnimation)) {
         model.resetDragOffset()
       }
