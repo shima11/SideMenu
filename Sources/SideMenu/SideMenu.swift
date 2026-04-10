@@ -535,15 +535,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Ignore until dragging is confirmed
     guard isMenuDragging else { return }
 
-    // Rubber band: closed state dragging left
+    // Closed state dragging left: ignore (no rubber band)
     if model.currentState == .closed && value.translation.width < 0 {
-      let rubberOffset = SideMenuState.rubberBand(
-        offset: abs(value.translation.width),
-        limit: configuration.rubberBandLimit
-      )
-      withTransaction(Transaction(animation: nil)) {
-        model.setDragOffset(-Float(rubberOffset))
-      }
       return
     }
 
