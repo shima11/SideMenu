@@ -153,7 +153,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
 
   /// Animation curve used for menu transitions.
   ///
-  /// Default is `.easeOut(duration: 0.3)` for flat, non-bouncy motion.
+  /// Default is `.spring(duration: 0.4, bounce: 0.0)` for physically-based motion.
   public var menuAnimation: Animation
 
   /// Controls which screen area can initiate a drag to open the menu.
@@ -173,22 +173,36 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   /// Default is `.leading`.
   public var edge: MenuEdge
 
+  /// Minimum flick velocity (pt/s) to trigger open/close regardless of distance.
+  ///
+  /// Default is 300.
+  public var velocityThreshold: CGFloat
+
+  /// Maximum visual displacement for rubber band effect at menu edges.
+  ///
+  /// Default is 40.
+  public var rubberBandLimit: CGFloat
+
   /// Creates a new side menu configuration.
   ///
   /// - Parameters:
   ///   - menuWidth: Width of the menu as a fraction of screen width (0.0 to 1.0). Default is 0.8.
-  ///   - menuStyle: Visual presentation style. Default is `.slideInOut()`.
-  ///   - menuAnimation: Animation curve for transitions. Default is `.easeOut(duration: 0.3)`.
+  ///   - menuStyle: Visual presentation style. Default is `.slideOut()`.
+  ///   - menuAnimation: Animation curve for transitions. Default is `.spring(duration: 0.4, bounce: 0.0)`.
   ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full()`.
   ///   - hapticStyle: The style of impact haptic feedback. Set to `nil` to disable. Default is `.medium`.
   ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
+  ///   - velocityThreshold: Minimum flick velocity to trigger open/close. Default is 300.
+  ///   - rubberBandLimit: Maximum rubber band displacement in points. Default is 40.
   public init(
     menuWidth: CGFloat = 0.8,
     menuStyle: MenuStyle = .slideOut(),
-    menuAnimation: Animation = .easeOut(duration: 0.3),
+    menuAnimation: Animation = .spring(duration: 0.4, bounce: 0.0),
     dragActivation: MenuDragActivation = .full(),
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
-    edge: MenuEdge = .leading
+    edge: MenuEdge = .leading,
+    velocityThreshold: CGFloat = 300,
+    rubberBandLimit: CGFloat = 40
   ) {
     self.menuWidth = min(max(menuWidth, 0), 1)
     self.menuStyle = menuStyle
@@ -196,6 +210,8 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     self.dragActivation = dragActivation
     self.hapticStyle = hapticStyle
     self.edge = edge
+    self.velocityThreshold = max(velocityThreshold, 0)
+    self.rubberBandLimit = max(rubberBandLimit, 0)
   }
 }
 
@@ -249,6 +265,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   @AccessibilityFocusState private var focusTarget: FocusTarget?
   @State private var isMenuDragging = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
+  @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
+  @State private var rigidHapticGenerator: UIImpactFeedbackGenerator?
 
   private enum FocusTarget: Hashable {
     case menu
@@ -356,6 +374,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
     .onDisappear {
       hapticGenerator = nil
+      lightHapticGenerator = nil
+      rigidHapticGenerator = nil
     }
   }
 
@@ -370,8 +390,14 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     if let style = configuration.hapticStyle {
       hapticGenerator = UIImpactFeedbackGenerator(style: style)
       hapticGenerator?.prepare()
+      lightHapticGenerator = UIImpactFeedbackGenerator(style: .light)
+      lightHapticGenerator?.prepare()
+      rigidHapticGenerator = UIImpactFeedbackGenerator(style: .rigid)
+      rigidHapticGenerator?.prepare()
     } else {
       hapticGenerator = nil
+      lightHapticGenerator = nil
+      rigidHapticGenerator = nil
     }
   }
 
@@ -495,28 +521,62 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       return
     }
 
-    // Width boundary check
-    guard horizontal <= menuWidth else { return }
-
-    // Prevent dragging closed menu to the left
-    guard !(model.currentState == .closed && value.translation.width < 0) else { return }
-
-    // Start dragging if threshold exceeded
+    // Start dragging if threshold exceeded — cancel any in-progress animation
     if horizontal > dragParams.startThreshold && !isMenuDragging {
       isMenuDragging = true
     }
 
-    // Handle edge bounce when menu is open and dragging right
-    if model.currentState == .open && value.translation.width > 0 {
+    // Rubber band: closed state dragging left
+    if model.currentState == .closed && value.translation.width < 0 {
+      let rubberOffset = SideMenuState.rubberBand(
+        offset: abs(value.translation.width),
+        limit: configuration.rubberBandLimit
+      )
       withTransaction(Transaction(animation: nil)) {
-        model.setDragOffset(SideMenuState.edgeBounceResistance)
+        model.setDragOffset(-Float(rubberOffset))
       }
       return
     }
 
-    // Update drag offset
+    // Rubber band: open state dragging right (overdrag)
+    if model.currentState == .open && value.translation.width > 0 {
+      let rubberOffset = SideMenuState.rubberBand(
+        offset: value.translation.width,
+        limit: configuration.rubberBandLimit
+      )
+      withTransaction(Transaction(animation: nil)) {
+        model.setDragOffset(Float(rubberOffset))
+      }
+      // Haptic at rubber band limit
+      if value.translation.width > configuration.rubberBandLimit && configuration.hapticStyle != nil {
+        rigidHapticGenerator?.impactOccurred()
+      }
+      return
+    }
+
+    // Width boundary check
+    guard horizontal <= menuWidth else { return }
+
+    // Update drag offset (cancel animation for immediate tracking)
     withTransaction(Transaction(animation: nil)) {
       model.setDragOffset(Float(value.translation.width))
+    }
+
+    // Threshold crossing haptic (50% of menu width)
+    if configuration.hapticStyle != nil {
+      let progress: CGFloat
+      if model.currentState == .open {
+        // Closing: progress from 1→0, threshold at 0.5
+        progress = 1.0 + CGFloat(value.translation.width) / menuWidth
+      } else {
+        // Opening: progress from 0→1, threshold at 0.5
+        progress = CGFloat(value.translation.width) / menuWidth
+      }
+      let pastThreshold = progress > 0.5
+      if pastThreshold != model.hasPassedThreshold {
+        model.hasPassedThreshold = pastThreshold
+        lightHapticGenerator?.impactOccurred()
+      }
     }
   }
 
@@ -535,17 +595,44 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
 
     isMenuDragging = false
+    model.hasPassedThreshold = false
 
-    let shouldClose = value.translation.width < -dragParams.openCloseThreshold
-    let shouldOpen = value.translation.width > dragParams.openCloseThreshold
+    let velocityX = value.velocity.width
     let startingState = model.currentState
 
-    withTransaction(Transaction(animation: configuration.menuAnimation)) {
+    // Velocity-based snap: if flick is fast enough, decide by direction
+    let shouldOpen: Bool
+    let shouldClose: Bool
+    if abs(velocityX) > configuration.velocityThreshold {
+      shouldOpen = velocityX > 0
+      shouldClose = velocityX < 0
+    } else {
+      // Position-based fallback: 50% of menu width
+      let currentPosition: CGFloat
+      if startingState == .open {
+        currentPosition = menuWidth + CGFloat(value.translation.width)
+      } else {
+        currentPosition = CGFloat(value.translation.width)
+      }
+      shouldOpen = currentPosition > menuWidth * 0.5
+      shouldClose = currentPosition <= menuWidth * 0.5
+    }
+
+    // Spring animation with velocity transfer
+    let normalizedVelocity = velocityX / menuWidth
+    var transaction = Transaction()
+    transaction.animation = .interpolatingSpring(
+      mass: 1.0,
+      stiffness: 200,
+      damping: 25,
+      initialVelocity: normalizedVelocity
+    )
+
+    withTransaction(transaction) {
       model.resetDragOffset()
       if shouldClose {
         model.close()
-      }
-      if shouldOpen {
+      } else if shouldOpen {
         model.open()
       }
     }

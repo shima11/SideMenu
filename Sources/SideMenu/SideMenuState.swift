@@ -17,9 +17,6 @@ public final class SideMenuState {
     /// Damping factor for blur animation (higher = faster transition)
     static let blurDampingFactor: CGFloat = 4.0
 
-    /// Resistance when dragging past menu edge
-    static let edgeBounceResistance: Float = 2.0
-
     /// Minimum width value to prevent division by zero
     static let minimumWidth: CGFloat = 1.0
   }
@@ -198,8 +195,21 @@ public final class SideMenuState {
     }
   }
 
-  /// Returns the edge bounce resistance value.
-  internal static var edgeBounceResistance: Float {
-    AnimationConstants.edgeBounceResistance
+  // MARK: - Haptic Threshold Tracking
+
+  /// Whether the drag has passed the 50% snap threshold (for one-shot haptic).
+  public var hasPassedThreshold: Bool = false
+
+  // MARK: - Rubber Band
+
+  /// Apple-style rubber band formula: logarithmic resistance beyond a limit.
+  /// - Parameters:
+  ///   - offset: Actual drag distance beyond the boundary
+  ///   - limit: Maximum visual displacement (e.g. 40pt)
+  ///   - coefficient: Resistance strength (0.55 = Apple default)
+  /// - Returns: Rubber-banded offset value
+  internal static func rubberBand(offset: CGFloat, limit: CGFloat, coefficient: CGFloat = 0.55) -> CGFloat {
+    let clamped = max(offset, 0)
+    return (1 - (1 / (clamped * coefficient / limit + 1))) * limit
   }
 }
