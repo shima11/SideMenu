@@ -196,7 +196,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   ///   - rubberBandLimit: Maximum rubber band displacement in points. Default is 40.
   public init(
     menuWidth: CGFloat = 0.8,
-    menuStyle: MenuStyle = .slideOut(),
+    menuStyle: MenuStyle = .slideInOut(),
     menuAnimation: Animation = .spring(duration: 0.4, bounce: 0.0),
     dragActivation: MenuDragActivation = .full(),
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
@@ -264,6 +264,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   @AccessibilityFocusState private var focusTarget: FocusTarget?
   @State private var isMenuDragging = false
+  @State private var hasReachedRubberBandLimit = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
   @State private var rigidHapticGenerator: UIImpactFeedbackGenerator?
@@ -547,9 +548,12 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       withTransaction(Transaction(animation: nil)) {
         model.setDragOffset(Float(rubberOffset))
       }
-      // Haptic at rubber band limit
-      if value.translation.width > configuration.rubberBandLimit && configuration.hapticStyle != nil {
+      // Haptic once at rubber band limit
+      if value.translation.width > configuration.rubberBandLimit && !hasReachedRubberBandLimit {
+        hasReachedRubberBandLimit = true
         rigidHapticGenerator?.impactOccurred()
+      } else if value.translation.width <= configuration.rubberBandLimit {
+        hasReachedRubberBandLimit = false
       }
       return
     }
@@ -595,10 +599,19 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
 
     isMenuDragging = false
+    hasReachedRubberBandLimit = false
     model.hasPassedThreshold = false
 
     let velocityX = value.velocity.width
     let startingState = model.currentState
+
+    // Current position of the menu edge
+    let currentPosition: CGFloat
+    if startingState == .open {
+      currentPosition = menuWidth + CGFloat(value.translation.width)
+    } else {
+      currentPosition = CGFloat(value.translation.width)
+    }
 
     // Velocity-based snap: if flick is fast enough, decide by direction
     let shouldOpen: Bool
@@ -608,18 +621,23 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       shouldClose = velocityX < 0
     } else {
       // Position-based fallback: 50% of menu width
-      let currentPosition: CGFloat
-      if startingState == .open {
-        currentPosition = menuWidth + CGFloat(value.translation.width)
-      } else {
-        currentPosition = CGFloat(value.translation.width)
-      }
       shouldOpen = currentPosition > menuWidth * 0.5
       shouldClose = currentPosition <= menuWidth * 0.5
     }
 
-    // Spring animation with velocity transfer
-    let normalizedVelocity = velocityX / menuWidth
+    // Remaining distance to target
+    let targetPosition: CGFloat = (shouldOpen ? menuWidth : 0)
+    let remainingDistance = targetPosition - currentPosition
+
+    // Fluid Interface: normalizedVelocity = gestureVelocity / remainingDistance
+    // This ensures the spring animation starts at exactly the gesture's velocity
+    let normalizedVelocity: Double
+    if abs(remainingDistance) > 1 {
+      normalizedVelocity = velocityX / remainingDistance
+    } else {
+      normalizedVelocity = 0
+    }
+
     var transaction = Transaction()
     transaction.animation = .interpolatingSpring(
       mass: 1.0,
@@ -794,7 +812,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     sideMenu
       .frame(width: width)
       .offset(x: offset, y: 0)
-      .highPriorityGesture(
+      .simultaneousGesture(
         createDragGesture(menuWidth: width, dragParams: extractDragParams()),
         including: isMenuOpen ? .all : .subviews
       )
