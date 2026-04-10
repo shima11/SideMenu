@@ -103,15 +103,17 @@ public enum MenuDragActivation: Equatable, Hashable, Sendable {
   /// Only drags starting from the screen edge can open the menu.
   /// - Parameters:
   ///   - edgeWidth: Width of the edge area in points (default: 24)
-  ///   - startThreshold: Minimum drag distance to start in points (default: 5)
+  ///   - startThreshold: Minimum drag distance to start in points (default: 15)
   ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
-  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 15, openCloseThreshold: CGFloat = 50)
+  ///   - directionRatio: Required horizontal/vertical ratio to recognize as horizontal drag (default: 1.5)
+  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 15, openCloseThreshold: CGFloat = 50, directionRatio: CGFloat = 1.5)
 
   /// Drags starting anywhere on the screen can open the menu.
   /// - Parameters:
   ///   - startThreshold: Minimum drag distance to start in points (default: 15)
   ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
-  case full(startThreshold: CGFloat = 15, openCloseThreshold: CGFloat = 50)
+  ///   - directionRatio: Required horizontal/vertical ratio to recognize as horizontal drag (default: 1.5)
+  case full(startThreshold: CGFloat = 15, openCloseThreshold: CGFloat = 50, directionRatio: CGFloat = 1.5)
 }
 
 /// Specifies which edge the menu appears from.
@@ -407,6 +409,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     let edgeWidth: CGFloat
     let startThreshold: CGFloat
     let openCloseThreshold: CGFloat
+    let directionRatio: CGFloat
 
     func shouldIgnoreDrag(isMenuOpen: Bool, startLocationX: CGFloat) -> Bool {
       isEdgeOnly && !isMenuOpen && startLocationX > edgeWidth
@@ -415,19 +418,21 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   private func extractDragParams() -> DragParams {
     switch configuration.dragActivation {
-    case .edge(let edgeWidth, let startThreshold, let openCloseThreshold):
+    case .edge(let edgeWidth, let startThreshold, let openCloseThreshold, let directionRatio):
       return DragParams(
         isEdgeOnly: true,
         edgeWidth: max(edgeWidth, 0),
         startThreshold: max(startThreshold, 0),
-        openCloseThreshold: max(openCloseThreshold, 0)
+        openCloseThreshold: max(openCloseThreshold, 0),
+        directionRatio: max(directionRatio, 1.0)
       )
-    case .full(let startThreshold, let openCloseThreshold):
+    case .full(let startThreshold, let openCloseThreshold, let directionRatio):
       return DragParams(
         isEdgeOnly: false,
         edgeWidth: 0,
         startThreshold: max(startThreshold, 0),
-        openCloseThreshold: max(openCloseThreshold, 0)
+        openCloseThreshold: max(openCloseThreshold, 0),
+        directionRatio: max(directionRatio, 1.0)
       )
     }
   }
@@ -517,7 +522,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
 
     // Horizontal vs vertical gesture check (require clear horizontal intent)
-    guard horizontal > vertical * 1.5 else {
+    guard horizontal > vertical * dragParams.directionRatio else {
       isMenuDragging = false
       return
     }
