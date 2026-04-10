@@ -535,8 +535,12 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Ignore until dragging is confirmed
     guard isMenuDragging else { return }
 
-    // Closed state dragging left: ignore (no rubber band)
+    // Closed state dragging left: not a menu gesture
     if model.currentState == .closed && value.translation.width < 0 {
+      isMenuDragging = false
+      withTransaction(Transaction(animation: nil)) {
+        model.setDragOffset(0)
+      }
       return
     }
 
