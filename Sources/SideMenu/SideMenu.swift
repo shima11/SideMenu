@@ -696,7 +696,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
       dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: 0)
 
-      sideMenuView(width: menuWidthPoints, offset: calcOffset)
+      sideMenuView(width: menuWidthPoints, offset: min(calcOffset, 0))
     }
   }
 
@@ -707,13 +707,14 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
-    sideMenuView(width: menuWidthPoints, offset: calcOffset)
+    // Clamp menu offset to prevent gap on leading edge during overdrag
+    sideMenuView(width: menuWidthPoints, offset: min(calcOffset, 0))
 
     ZStack {
       mainViewWithEffects(
         screenWidth: screenWidth,
-        blur: 0,
-        scale: 1,
+        blur: styleParams.blur,
+        scale: styleParams.scale,
         offset: calcOffset
       )
 
