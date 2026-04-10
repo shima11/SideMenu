@@ -105,13 +105,13 @@ public enum MenuDragActivation: Equatable, Hashable, Sendable {
   ///   - edgeWidth: Width of the edge area in points (default: 24)
   ///   - startThreshold: Minimum drag distance to start in points (default: 5)
   ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
-  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 5, openCloseThreshold: CGFloat = 50)
+  case edge(edgeWidth: CGFloat = 24, startThreshold: CGFloat = 15, openCloseThreshold: CGFloat = 50)
 
   /// Drags starting anywhere on the screen can open the menu.
   /// - Parameters:
-  ///   - startThreshold: Minimum drag distance to start in points (default: 5)
+  ///   - startThreshold: Minimum drag distance to start in points (default: 15)
   ///   - openCloseThreshold: Minimum drag distance to open/close in points (default: 50)
-  case full(startThreshold: CGFloat = 5, openCloseThreshold: CGFloat = 50)
+  case full(startThreshold: CGFloat = 15, openCloseThreshold: CGFloat = 50)
 }
 
 /// Specifies which edge the menu appears from.
@@ -516,8 +516,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       return
     }
 
-    // Horizontal vs vertical gesture check
-    guard horizontal > vertical else {
+    // Horizontal vs vertical gesture check (require clear horizontal intent)
+    guard horizontal > vertical * 1.5 else {
       isMenuDragging = false
       return
     }
