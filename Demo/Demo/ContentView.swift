@@ -16,7 +16,7 @@ struct ContentView: View {
   
   // Drag activation parameters
   @State private var edgeWidth: Double = 24
-  @State private var startThreshold: Double = 6
+  @State private var startThreshold: Double = 20
   @State private var openCloseThreshold: Double = 50
 
   private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
@@ -69,24 +69,21 @@ struct ContentView: View {
   }
   
   private var menuContent: some View {
-    ZStack {
-      Color(uiColor: .systemBackground)
-      
-      NavigationStack {
-        List {
-          ForEach(rooms, id: \.self) { room in
-            Button(room) {
-              withAnimation(configuration.menuAnimation) {
-                selectedRoom = room
-                if menuState.isOpen {
-                  menuState.close()
-                }
+    NavigationStack {
+      List {
+        ForEach(rooms, id: \.self) { room in
+          Button(room) {
+            withAnimation(configuration.menuAnimation) {
+              selectedRoom = room
+              if menuState.isOpen {
+                menuState.close()
               }
             }
           }
         }
-        .navigationTitle("Menu")
       }
+      .scrollContentBackground(.hidden)
+      .navigationTitle("Menu")
     }
   }
   
@@ -246,7 +243,7 @@ struct ContentView: View {
               Text("\(Int(startThreshold))pt")
                 .foregroundStyle(.secondary)
             }
-            Slider(value: $startThreshold, in: 0...20, step: 1)
+            Slider(value: $startThreshold, in: 0...30, step: 1)
           }
 
           VStack(alignment: .leading, spacing: 8) {
