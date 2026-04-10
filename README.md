@@ -10,14 +10,13 @@ A highly customizable, gesture-driven side menu component for SwiftUI with full 
 
 ## Features
 
-- ✅ **Smooth Animations** - Customizable animation curves with snappy, spring, and ease-in-out options
-- ✅ **Gesture Support** - Full drag gesture support with configurable edge or full-screen activation
-- ✅ **Accessibility** - Complete VoiceOver support with proper focus management and escape actions
-- ✅ **Haptic Feedback** - Optional haptic feedback for enhanced user experience
-- ✅ **Visual Effects** - Configurable blur, scale, and dim effects for the main content
-- ✅ **Two Presentation Styles** - Choose between slide-in-over or slide-in-out animations
-- ✅ **Highly Configurable** - Extensive customization options for all visual and behavioral aspects
-- ✅ **Type Safe** - Fully documented public API with SwiftUI best practices
+- **Fluid Gesture** - Velocity-based spring animations with rubber band effect at menu edges
+- **3 Presentation Styles** - Slide-in-over, slide-in-out, and slide-out (Threads-like) + custom layout
+- **Gesture Control** - Full-screen or edge-only drag activation with configurable sensitivity
+- **Haptic Feedback** - Configurable haptic feedback on open/close and rubber band limit
+- **Visual Effects** - Per-style blur, scale, and dim effects for natural transitions
+- **Accessibility** - Complete VoiceOver support with focus management and escape actions
+- **Type Safe** - Fully documented public API with Swift 6 concurrency support
 
 ## Requirements
 
@@ -55,40 +54,22 @@ struct ContentView: View {
     var body: some View {
         SideMenuView(model: menuState) {
             // Side menu content
-            MenuView()
+            List {
+                Button("Home") { withAnimation { menuState.close() } }
+                Button("Settings") { withAnimation { menuState.close() } }
+            }
         } mainView: {
-            // Main content
-            MainContentView(menuState: menuState)
-        }
-    }
-}
-
-struct MenuView: View {
-    var body: some View {
-        List {
-            NavigationLink("Home", destination: Text("Home"))
-            NavigationLink("Settings", destination: Text("Settings"))
-            NavigationLink("Profile", destination: Text("Profile"))
-        }
-    }
-}
-
-struct MainContentView: View {
-    @Bindable var menuState: SideMenuState
-
-    var body: some View {
-        NavigationStack {
-            Text("Main Content")
-                .navigationTitle("Home")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Menu", systemImage: "line.3.horizontal") {
-                            withAnimation {
-                                menuState.toggle()
+            NavigationStack {
+                Text("Main Content")
+                    .navigationTitle("Home")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Menu", systemImage: "line.3.horizontal") {
+                                withAnimation { menuState.toggle() }
                             }
                         }
                     }
-                }
+            }
         }
     }
 }
@@ -96,82 +77,137 @@ struct MainContentView: View {
 
 For a complete interactive example with all configuration options, check out the `Demo` app in the repository.
 
-## Advanced Usage
+## Menu Styles
 
-### Custom Configuration
+### slideInOver
+
+Menu slides over the main content, which remains in place.
+
+```swift
+SideMenuConfiguration(
+    menuStyle: .slideInOver(blur: 3, scale: 0.95, dimValue: 0.3)
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `blur` | `2` | Blur radius applied to main content |
+| `scale` | `1` | Scale factor applied to main content |
+| `dimValue` | `0.2` | Dim overlay opacity |
+
+### slideInOut
+
+Menu and main content slide together.
+
+```swift
+SideMenuConfiguration(
+    menuStyle: .slideInOut(dimValue: 0.2)
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `dimValue` | `0.2` | Dim overlay opacity |
+
+### slideOut
+
+Main content slides out to reveal the menu underneath (like Meta Threads).
+
+```swift
+SideMenuConfiguration(
+    menuStyle: .slideOut(scale: 0.9, dimValue: 0.2, backgroundColor: .systemBackground)
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `scale` | `0.9` | Scale factor for the menu |
+| `dimValue` | `0.2` | Dim overlay opacity |
+| `backgroundColor` | `nil` | Background color behind the menu during scale animation |
+
+### custom
+
+Fully custom layout with user-defined closures.
+
+```swift
+SideMenuConfiguration(
+    menuStyle: .custom(
+        dimValue: 0.2,
+        sideMenuLayout: { context, menuView in
+            // Custom menu layout
+        },
+        mainViewLayout: { context, mainView in
+            // Custom main view layout
+        }
+    )
+)
+```
+
+## Configuration
+
+### SideMenuConfiguration
 
 ```swift
 let config = SideMenuConfiguration(
-    menuWidth: 0.7,              // Menu takes 70% of screen width
-    menuStyle: .slideInOver,      // Menu slides over content
-    blur: 3,                      // Blur radius for main content
-    scale: 0.95,                  // Scale main content to 95%
-    dimValue: 0.3,                // Dim overlay opacity
+    menuWidth: 0.7,
+    menuStyle: .slideInOver(blur: 3, scale: 0.95, dimValue: 0.3),
     menuAnimation: .spring(duration: 0.4, bounce: 0.2),
-    dragActivation: .edge,        // Only edge drags open menu
-    dragEdgeWidth: 30,            // Edge width in points
-    enableHaptics: true           // Enable haptic feedback
+    dragActivation: .edge(edgeWidth: 30),
+    hapticStyle: .medium
 )
 
-SideMenuView(
-    model: menuState,
-    configuration: config
-) {
+SideMenuView(model: menuState, configuration: config) {
     MenuView()
 } mainView: {
-    MainContentView(menuState: menuState)
+    MainContentView()
 }
 ```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `menuWidth` | `CGFloat` | `0.8` | Width of menu as fraction of screen (0.0 to 1.0) |
+| `menuStyle` | `MenuStyle` | `.slideInOut()` | Presentation style |
+| `menuAnimation` | `Animation` | `.spring(duration: 0.4, bounce: 0.0)` | Animation curve for transitions |
+| `dragActivation` | `MenuDragActivation` | `.full()` | Drag activation area |
+| `hapticStyle` | `FeedbackStyle?` | `.medium` | Haptic feedback style (`nil` to disable) |
+| `edge` | `MenuEdge` | `.leading` | Which screen edge the menu appears from |
+| `velocityThreshold` | `CGFloat` | `300` | Minimum flick velocity (pt/s) to trigger open/close |
+| `rubberBandLimit` | `CGFloat` | `40` | Maximum rubber band displacement in points |
+
+### Drag Activation
+
+Control how users can open the menu with gestures.
+
+```swift
+// Full-screen drag (default)
+.full(startThreshold: 15, openCloseThreshold: 50, directionRatio: 1.5)
+
+// Edge-only drag
+.edge(edgeWidth: 24, startThreshold: 15, openCloseThreshold: 50, directionRatio: 1.5)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `edgeWidth` | `24` | Width of edge drag area in points (edge only) |
+| `startThreshold` | `15` | Minimum horizontal drag distance to start gesture |
+| `openCloseThreshold` | `50` | Minimum drag distance to open/close |
+| `directionRatio` | `1.5` | Required horizontal/vertical ratio (higher = stricter) |
 
 ### Programmatic Control
 
 ```swift
 // Open the menu
-withAnimation {
-    menuState.open()
-}
+withAnimation { menuState.open() }
 
 // Close the menu
-withAnimation {
-    menuState.close()
-}
+withAnimation { menuState.close() }
 
 // Toggle the menu
-withAnimation {
-    menuState.toggle()
-}
+withAnimation { menuState.toggle() }
 
 // Check if menu is open
-if menuState.isOpen {
-    // Do something
-}
+if menuState.isOpen { /* ... */ }
 ```
-
-## Configuration Options
-
-### SideMenuConfiguration
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `menuWidth` | `CGFloat` | `0.8` | Width of menu as fraction of screen (0.0 to 1.0) |
-| `menuStyle` | `MenuStyle` | `.slideInOut` | Presentation style (`.slideInOver` or `.slideInOut`) |
-| `blur` | `CGFloat` | `2` | Maximum blur radius for main content |
-| `scale` | `CGFloat` | `1` | Minimum scale for main content (0.0 to 1.0) |
-| `dimValue` | `CGFloat` | `0.2` | Opacity of dim overlay (0.0 to 1.0) |
-| `menuAnimation` | `Animation` | `.snappy(...)` | Animation curve for transitions |
-| `dragActivation` | `MenuDragActivation` | `.full` | Drag area (`.edge` or `.full`) |
-| `dragEdgeWidth` | `CGFloat` | `24` | Width of edge drag area in points |
-| `dragStartThreshold` | `CGFloat` | `6` | Minimum drag distance to start gesture |
-| `openCloseThreshold` | `CGFloat` | `50` | Minimum drag distance to open/close |
-| `enableHaptics` | `Bool` | `true` | Enable haptic feedback |
-
-### SideMenuState
-
-Public methods:
-- `open()` - Opens the menu
-- `close()` - Closes the menu
-- `toggle()` - Toggles menu state
-- `isOpen` - Bool indicating if menu is open
 
 ## Accessibility
 
