@@ -266,10 +266,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   @AccessibilityFocusState private var focusTarget: FocusTarget?
   @State private var isMenuDragging = false
-  @State private var hasReachedRubberBandLimit = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
-  @State private var rigidHapticGenerator: UIImpactFeedbackGenerator?
 
   private enum FocusTarget: Hashable {
     case menu
@@ -378,7 +376,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     .onDisappear {
       hapticGenerator = nil
       lightHapticGenerator = nil
-      rigidHapticGenerator = nil
     }
   }
 
@@ -395,12 +392,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       hapticGenerator?.prepare()
       lightHapticGenerator = UIImpactFeedbackGenerator(style: .light)
       lightHapticGenerator?.prepare()
-      rigidHapticGenerator = UIImpactFeedbackGenerator(style: .rigid)
-      rigidHapticGenerator?.prepare()
     } else {
       hapticGenerator = nil
       lightHapticGenerator = nil
-      rigidHapticGenerator = nil
     }
   }
 
@@ -544,22 +538,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       return
     }
 
-    // Rubber band: open state dragging right (overdrag)
+    // Ignore dragging in the open direction when menu is already open
     if model.currentState == .open && value.translation.width > 0 {
-      let rubberOffset = SideMenuState.rubberBand(
-        offset: value.translation.width,
-        limit: configuration.rubberBandLimit
-      )
-      withTransaction(Transaction(animation: nil)) {
-        model.setDragOffset(Float(rubberOffset))
-      }
-      // Haptic once at rubber band limit
-      if value.translation.width > configuration.rubberBandLimit && !hasReachedRubberBandLimit {
-        hasReachedRubberBandLimit = true
-        rigidHapticGenerator?.impactOccurred()
-      } else if value.translation.width <= configuration.rubberBandLimit {
-        hasReachedRubberBandLimit = false
-      }
       return
     }
 
@@ -612,7 +592,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
 
     isMenuDragging = false
-    hasReachedRubberBandLimit = false
     model.hasPassedThreshold = false
 
     let velocityX = value.velocity.width
