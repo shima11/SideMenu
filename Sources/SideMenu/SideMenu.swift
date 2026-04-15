@@ -551,16 +551,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       model.setDragOffset(Float(value.translation.width))
     }
 
-    // Threshold crossing haptic (50% of menu width)
-    if configuration.hapticStyle != nil {
-      let progress: CGFloat
-      if model.currentState == .open {
-        // Closing: progress from 1→0, threshold at 0.5
-        progress = 1.0 + CGFloat(value.translation.width) / menuWidth
-      } else {
-        // Opening: progress from 0→1, threshold at 0.5
-        progress = CGFloat(value.translation.width) / menuWidth
-      }
+    // Threshold crossing haptic (50% of menu width, opening only)
+    if configuration.hapticStyle != nil && model.currentState == .closed {
+      let progress = CGFloat(value.translation.width) / menuWidth
       let pastThreshold = progress > 0.5
       if pastThreshold != model.hasPassedThreshold {
         model.hasPassedThreshold = pastThreshold
