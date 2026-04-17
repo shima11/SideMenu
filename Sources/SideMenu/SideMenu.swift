@@ -1,6 +1,20 @@
 
 import SwiftUI
 
+// Animatable translation that doesn't affect layout (unlike .offset).
+private struct TranslationEffect: GeometryEffect {
+  var x: CGFloat
+
+  var animatableData: CGFloat {
+    get { x }
+    set { x = newValue }
+  }
+
+  func effectValue(size: CGSize) -> ProjectionTransform {
+    ProjectionTransform(CGAffineTransform(translationX: x, y: 0))
+  }
+}
+
 /// Context information passed to custom layout closures.
 public struct CustomLayoutContext: Sendable {
   /// The total width of the screen.
@@ -763,7 +777,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       .blur(radius: model.calculateBlur(maxValue: blur, totalWidth: screenWidth))
       .scaleEffect(model.calculateScale(minScale: scale, totalWidth: screenWidth))
       .frame(width: screenWidth)
-      .offset(x: offset, y: 0)
+      .modifier(TranslationEffect(x: offset))
       .disabled(isMenuDragging)
       .allowsHitTesting(!isMenuDragging)
       .accessibilityFocused($focusTarget, equals: .main)
@@ -779,7 +793,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           Double(model.calculateProgress(menuWidth: menuWidth) * dimValue)
         )
       )
-      .offset(x: offset, y: 0)
+      .modifier(TranslationEffect(x: offset))
       .allowsHitTesting(isMenuOpen)
       .onTapGesture {
         if model.isOpen {
@@ -797,7 +811,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func sideMenuView(width: CGFloat, offset: CGFloat) -> some View {
     sideMenu
       .frame(width: width)
-      .offset(x: offset, y: 0)
+      .modifier(TranslationEffect(x: offset))
       .simultaneousGesture(
         createDragGesture(menuWidth: width, dragParams: extractDragParams()),
         including: isMenuOpen ? .all : .subviews
