@@ -1,17 +1,17 @@
 
 import SwiftUI
 
-// Animatable translation that doesn't affect layout (unlike .offset).
-private struct TranslationEffect: GeometryEffect {
+// Layout-neutral horizontal translation modifier.
+// Uses visualEffect to avoid affecting layout (unlike .offset)
+// while correctly preserving the animation baseline during drag→snap transitions.
+private struct TranslationEffect: ViewModifier {
   var x: CGFloat
 
-  var animatableData: CGFloat {
-    get { x }
-    set { x = newValue }
-  }
-
-  func effectValue(size: CGSize) -> ProjectionTransform {
-    ProjectionTransform(CGAffineTransform(translationX: x, y: 0))
+  func body(content: Content) -> some View {
+    content
+      .visualEffect { content, _ in
+        content.offset(x: x)
+      }
   }
 }
 
