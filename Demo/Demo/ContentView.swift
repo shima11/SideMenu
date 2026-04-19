@@ -73,9 +73,11 @@ struct ContentView: View {
       List {
         ForEach(rooms, id: \.self) { room in
           Button(room) {
+            let menuWidth = UIScreen.main.bounds.width * configuration.menuWidth
             withAnimation(configuration.menuAnimation) {
               selectedRoom = room
               if menuState.isOpen {
+                menuState.currentOffset = -menuWidth
                 menuState.close()
               }
             }
@@ -123,7 +125,10 @@ struct ContentView: View {
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
+            let menuWidth = UIScreen.main.bounds.width * configuration.menuWidth
+            let target: CGFloat = menuState.isOpen ? -menuWidth : 0
             withAnimation(configuration.menuAnimation) {
+              menuState.currentOffset = target
               menuState.toggle()
             }
           } label: {
