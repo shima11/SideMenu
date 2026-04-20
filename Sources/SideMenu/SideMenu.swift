@@ -759,12 +759,18 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     scale: CGFloat,
     offset: CGFloat
   ) -> some View {
+    // IMPORTANT: .disabled() MUST be applied directly on mainView, BEFORE .offset().
+    // If .disabled() is placed after .offset(), SwiftUI's isEnabled environment change
+    // propagates through the offset layer, causing ScrollView to re-layout and
+    // the scroll position to jump visibly during drag.
+    // .allowsHitTesting(false) alone is insufficient because it cannot cancel
+    // gesture recognizers that are already tracking a touch.
     mainView
+      .disabled(isMenuDragging)
       .blur(radius: model.calculateBlur(maxValue: blur, totalWidth: screenWidth))
       .scaleEffect(model.calculateScale(minScale: scale, totalWidth: screenWidth))
       .frame(width: screenWidth)
       .offset(x: offset, y: 0)
-      .allowsHitTesting(!isMenuDragging)
       .accessibilityFocused($focusTarget, equals: .main)
       .accessibilityHidden(isMenuOpen && offset == 0)
   }
