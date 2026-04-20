@@ -266,7 +266,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
   @AccessibilityFocusState private var focusTarget: FocusTarget?
   @State private var isMenuDragging = false
-  @State private var dragStartOffset: CGFloat = 0
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
 
@@ -299,7 +298,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     self.mainView = mainView()
     self.configuration = configuration
   }
-  
+
   // MARK: - Body
 
   public var body: some View {
@@ -363,15 +362,12 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           .gesture(createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams))
       }
     }
-    .accessibilityAction(.escape) { closeMenuWithAnimation(menuWidth: menuWidthPoints) }
-    .accessibilityAction(named: "Close Menu") { closeMenuWithAnimation(menuWidth: menuWidthPoints) }
+    .accessibilityAction(.escape, closeMenuWithAnimation)
+    .accessibilityAction(named: "Close Menu", closeMenuWithAnimation)
     .onChange(of: model.currentState) { _, newValue in
       focusTarget = (newValue == .open) ? .menu : .main
     }
     .onAppear {
-      if model.currentOffset == 0 && model.currentState == .closed {
-        model.currentOffset = -menuWidthPoints
-      }
       updateHapticGenerator()
     }
     .onChange(of: configuration.hapticStyle) { _, _ in
@@ -383,10 +379,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
   }
 
-  private func closeMenuWithAnimation(menuWidth: CGFloat) {
+  private func closeMenuWithAnimation() {
     guard isMenuOpen else { return }
     withAnimation(configuration.menuAnimation) {
-      model.currentOffset = -menuWidth
       model.close()
     }
   }
@@ -489,7 +484,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   }
 
   private func calculateOffset(menuWidth: CGFloat) -> CGFloat {
-    model.currentOffset
+    let baseOffset = -(menuWidth * CGFloat(model.currentState == .open ? 0 : 1))
+    return baseOffset + CGFloat(model.dragOffset)
   }
 
   private func createDragGesture(
@@ -528,7 +524,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Start dragging only after sufficient horizontal movement
     if horizontal > dragParams.startThreshold && !isMenuDragging {
       isMenuDragging = true
-      dragStartOffset = model.currentOffset
     }
 
     // Ignore until dragging is confirmed
@@ -537,6 +532,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Closed state dragging left: not a menu gesture
     if model.currentState == .closed && value.translation.width < 0 {
       isMenuDragging = false
+      withTransaction(Transaction(animation: nil)) {
+        model.setDragOffset(0)
+      }
       return
     }
 
@@ -548,15 +546,14 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Width boundary check
     guard horizontal <= menuWidth else { return }
 
-    // Update offset directly (cancel animation for immediate tracking)
-    let newOffset = dragStartOffset + value.translation.width
+    // Update drag offset (cancel animation for immediate tracking)
     withTransaction(Transaction(animation: nil)) {
-      model.currentOffset = min(max(newOffset, -menuWidth), 0)
+      model.setDragOffset(Float(value.translation.width))
     }
 
     // Threshold crossing haptic (50% of menu width, opening only)
     if configuration.hapticStyle != nil && model.currentState == .closed {
-      let progress = model.calculateProgress(menuWidth: menuWidth)
+      let progress = CGFloat(value.translation.width) / menuWidth
       let pastThreshold = progress > 0.5
       if pastThreshold != model.hasPassedThreshold {
         model.hasPassedThreshold = pastThreshold
@@ -573,11 +570,17 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Edge-only activation check
     if dragParams.shouldIgnoreDrag(isMenuOpen: isMenuOpen, startLocationX: value.startLocation.x) {
       isMenuDragging = false
+      withTransaction(Transaction(animation: configuration.menuAnimation)) {
+        model.resetDragOffset()
+      }
       return
     }
 
     // If drag was never confirmed as horizontal, just reset
     if !isMenuDragging {
+      withTransaction(Transaction(animation: configuration.menuAnimation)) {
+        model.resetDragOffset()
+      }
       return
     }
 
@@ -587,8 +590,13 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     let velocityX = value.velocity.width
     let startingState = model.currentState
 
-    // Current position of the menu edge (currentOffset: -menuWidth=closed, 0=open)
-    let currentPosition = model.currentOffset + menuWidth  // 0=closed, menuWidth=open
+    // Current position of the menu edge
+    let currentPosition: CGFloat
+    if startingState == .open {
+      currentPosition = menuWidth + CGFloat(value.translation.width)
+    } else {
+      currentPosition = CGFloat(value.translation.width)
+    }
 
     // Velocity-based snap: if flick is fast enough, decide by direction
     let shouldOpen: Bool
@@ -603,10 +611,11 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
 
     // Remaining distance to target
-    let targetOffset: CGFloat = shouldOpen ? 0 : -menuWidth
-    let remainingDistance = targetOffset - model.currentOffset
+    let targetPosition: CGFloat = (shouldOpen ? menuWidth : 0)
+    let remainingDistance = targetPosition - currentPosition
 
     // Fluid Interface: normalizedVelocity = gestureVelocity / remainingDistance
+    // This ensures the spring animation starts at exactly the gesture's velocity
     let normalizedVelocity: Double
     if abs(remainingDistance) > 1 {
       normalizedVelocity = velocityX / remainingDistance
@@ -614,15 +623,21 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       normalizedVelocity = 0
     }
 
-    withAnimation(.interpolatingSpring(
+    var transaction = Transaction()
+    transaction.animation = .interpolatingSpring(
       mass: 1.0,
       stiffness: 200,
       damping: 25,
       initialVelocity: normalizedVelocity
-    )) {
-      model.currentOffset = targetOffset
-      if shouldOpen { model.open() }
-      else if shouldClose { model.close() }
+    )
+
+    withTransaction(transaction) {
+      model.resetDragOffset()
+      if shouldClose {
+        model.close()
+      } else if shouldOpen {
+        model.open()
+      }
     }
 
     // Trigger haptic feedback if state changed
@@ -643,7 +658,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     ZStack(alignment: .leading) {
       mainViewWithEffects(
         screenWidth: screenWidth,
-        menuWidth: menuWidthPoints,
         blur: styleParams.blur,
         scale: styleParams.scale,
         offset: 0
@@ -668,7 +682,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     ZStack {
       mainViewWithEffects(
         screenWidth: screenWidth,
-        menuWidth: menuWidthPoints,
         blur: styleParams.blur,
         scale: styleParams.scale,
         offset: calcOffset
@@ -694,7 +707,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           .frame(width: menuWidthPoints)
           .ignoresSafeArea()
       }
-      
+
       sideMenuView(width: menuWidthPoints, offset: 0)
         .scaleEffect(
           model.calculateMenuScale(minScale: styleParams.scale, menuWidth: menuWidthPoints),
@@ -704,7 +717,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       ZStack {
         mainViewWithEffects(
           screenWidth: screenWidth,
-          menuWidth: menuWidthPoints,
           blur: 0,
           scale: 1,
           offset: calcOffset + menuWidthPoints
@@ -743,17 +755,15 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   @ViewBuilder
   private func mainViewWithEffects(
     screenWidth: CGFloat,
-    menuWidth: CGFloat,
     blur: CGFloat,
     scale: CGFloat,
     offset: CGFloat
   ) -> some View {
     mainView
-      .blur(radius: model.calculateBlur(maxValue: blur, menuWidth: menuWidth))
-      .scaleEffect(model.calculateScale(minScale: scale, menuWidth: menuWidth))
+      .blur(radius: model.calculateBlur(maxValue: blur, totalWidth: screenWidth))
+      .scaleEffect(model.calculateScale(minScale: scale, totalWidth: screenWidth))
       .frame(width: screenWidth)
-      .offset(x: offset)
-      .disabled(isMenuDragging)
+      .offset(x: offset, y: 0)
       .allowsHitTesting(!isMenuDragging)
       .accessibilityFocused($focusTarget, equals: .main)
       .accessibilityHidden(isMenuOpen && offset == 0)
@@ -768,14 +778,11 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           Double(model.calculateProgress(menuWidth: menuWidth) * dimValue)
         )
       )
-      .offset(x: offset)
+      .offset(x: offset, y: 0)
       .allowsHitTesting(isMenuOpen)
       .onTapGesture {
         if model.isOpen {
-          withAnimation(configuration.menuAnimation) {
-            model.currentOffset = -menuWidth
-            model.close()
-          }
+          withAnimation(configuration.menuAnimation) { model.close() }
         }
       }
       .simultaneousGesture(
@@ -789,7 +796,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   private func sideMenuView(width: CGFloat, offset: CGFloat) -> some View {
     sideMenu
       .frame(width: width)
-      .offset(x: offset)
+      .offset(x: offset, y: 0)
       .simultaneousGesture(
         createDragGesture(menuWidth: width, dragParams: extractDragParams()),
         including: isMenuOpen ? .all : .subviews
@@ -801,19 +808,18 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 }
 
 #Preview {
-  
+
   @Previewable @State var model = SideMenuState()
-  
+
   SideMenuView(
     model: model,
     configuration: .init(menuStyle: .slideOut(scale: 0.8, dimValue: 0.5, backgroundColor: .secondarySystemBackground))
   ) {
     List {
       Section("Menu") {
-        let menuWidth = UIScreen.main.bounds.width * 0.8
-        Button("Home") { withAnimation { model.currentOffset = -menuWidth; model.close() } }
-        Button("Settings") { withAnimation { model.currentOffset = -menuWidth; model.close() } }
-        Button("Profile") { withAnimation { model.currentOffset = -menuWidth; model.close() } }
+        Button("Home") { withAnimation { model.close() } }
+        Button("Settings") { withAnimation { model.close() } }
+        Button("Profile") { withAnimation { model.close() } }
       }
     }
   } mainView: {
@@ -834,12 +840,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
-            let menuWidth = UIScreen.main.bounds.width * 0.8
-            let target: CGFloat = model.isOpen ? -menuWidth : 0
-            withAnimation {
-              model.currentOffset = target
-              model.toggle()
-            }
+            withAnimation { model.toggle() }
           } label: {
             Image(systemName: "line.3.horizontal")
           }

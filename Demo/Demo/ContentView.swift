@@ -8,6 +8,7 @@ struct ContentView: View {
   @State private var configuration = SideMenuConfiguration()
   @State private var showDetail = false
   @State private var showSettings = false
+  @State private var searchText: String = ""
   
   // Style-specific parameters
   @State private var blur: Double = 2
@@ -73,11 +74,9 @@ struct ContentView: View {
       List {
         ForEach(rooms, id: \.self) { room in
           Button(room) {
-            let menuWidth = UIScreen.main.bounds.width * configuration.menuWidth
             withAnimation(configuration.menuAnimation) {
               selectedRoom = room
               if menuState.isOpen {
-                menuState.currentOffset = -menuWidth
                 menuState.close()
               }
             }
@@ -93,6 +92,10 @@ struct ContentView: View {
     NavigationStack {
       ScrollView {
         VStack(spacing: 12) {
+          TextField("Search...", text: $searchText)
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal, 16)
+
           ForEach(0..<20) { index in
             Button {
               showDetail = true
@@ -125,10 +128,7 @@ struct ContentView: View {
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
           Button {
-            let menuWidth = UIScreen.main.bounds.width * configuration.menuWidth
-            let target: CGFloat = menuState.isOpen ? -menuWidth : 0
             withAnimation(configuration.menuAnimation) {
-              menuState.currentOffset = target
               menuState.toggle()
             }
           } label: {
