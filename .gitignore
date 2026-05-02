@@ -35,7 +35,6 @@ playground.xcworkspace
 .build/
 
 # Demo project generated files
-Demo/*.xcodeproj
 Demo/Demo/Info.plist
 
 # CocoaPods
