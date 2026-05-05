@@ -26,7 +26,12 @@ public final class SideMenuState {
   /// The current state of the menu.
   public private(set) var currentState: State = .closed
 
-  /// The current drag offset in points.
+  /// The current drag offset in points, expressed as "opening progress".
+  ///
+  /// Positive values represent gesture progress toward the open state, and
+  /// negative values toward the closed state. The sign convention is
+  /// independent of `MenuEdge`: callers in the view layer convert raw gesture
+  /// translation into this opening progress before storing it here.
   public private(set) var dragOffset: Float = 0.0
 
   /// Whether the menu is currently open.

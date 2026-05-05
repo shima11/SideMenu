@@ -10,6 +10,10 @@ public struct CustomLayoutContext: Sendable {
   public let menuWidth: CGFloat
 
   /// The current offset value based on drag and open/close state.
+  ///
+  /// Semantics depend on `edge`:
+  /// - `.leading`: ranges from `-menuWidth` (closed) to `0` (open).
+  /// - `.trailing`: ranges from `0` (closed) to `-menuWidth` (open).
   public let offset: CGFloat
 
   /// The progress of the menu animation (0 = closed, 1 = open).
@@ -20,6 +24,9 @@ public struct CustomLayoutContext: Sendable {
 
   /// Whether the user is currently dragging.
   public let isDragging: Bool
+
+  /// The edge of the screen the menu appears from.
+  public let edge: MenuEdge
 }
 
 /// Visual presentation style for the side menu.
@@ -121,12 +128,8 @@ public enum MenuEdge: Equatable, Hashable, Sendable {
   /// Menu appears from the leading edge (left in LTR, right in RTL).
   case leading
 
-  // MARK: - Future Features
-
   /// Menu appears from the trailing edge (right in LTR, left in RTL).
-  ///
-  /// **Note**: This feature is planned for a future release and is currently not implemented.
-  // case trailing
+  case trailing
 }
 
 /// Configuration options for customizing SideMenu appearance and behavior.
@@ -169,8 +172,6 @@ public struct SideMenuConfiguration: Equatable, Sendable {
   public var hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle?
 
   /// Edge of the screen from which the menu appears.
-  ///
-  /// **Note**: Currently only `.leading` is fully supported. `.trailing` support is planned for a future release.
   ///
   /// Default is `.leading`.
   public var edge: MenuEdge
@@ -278,6 +279,22 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     model.currentState == .open
   }
 
+  /// Sign multiplier converting raw horizontal translation into "opening progress".
+  /// Positive opening progress always means moving toward the open state regardless of edge.
+  private var dragDirection: CGFloat {
+    switch configuration.edge {
+    case .leading: return 1
+    case .trailing: return -1
+    }
+  }
+
+  private var stackAlignment: Alignment {
+    switch configuration.edge {
+    case .leading: return .leading
+    case .trailing: return .trailing
+    }
+  }
+
   // MARK: - Initialization
 
   /// Creates a new side menu view.
@@ -353,7 +370,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams),
       including: (!isMenuOpen && !dragParams.isEdgeOnly) ? .all : .none
     )
-    .overlay(alignment: .leading) {
+    .overlay(alignment: stackAlignment) {
       if dragParams.isEdgeOnly && !isMenuOpen {
         Color.clear
           .frame(width: dragParams.edgeWidth)
@@ -483,9 +500,23 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
   }
 
+  /// Computes the slideInOut combined offset (raw pixel direction).
+  ///
+  /// Range is `[-menuWidth, 0]` for both edges, but endpoints map differently:
+  /// - `.leading`: closed = `-menuWidth`, open = `0`.
+  /// - `.trailing`: closed = `0`, open = `-menuWidth`.
+  ///
+  /// `model.dragOffset` is "opening progress" (positive toward open). The raw
+  /// pixel shift is `dragDirection * dragOffset`, so we add it to the base.
   private func calculateOffset(menuWidth: CGFloat) -> CGFloat {
-    let baseOffset = -(menuWidth * CGFloat(model.currentState == .open ? 0 : 1))
-    return baseOffset + CGFloat(model.dragOffset)
+    let baseOffset: CGFloat
+    switch configuration.edge {
+    case .leading:
+      baseOffset = -(menuWidth * CGFloat(model.currentState == .open ? 0 : 1))
+    case .trailing:
+      baseOffset = -(menuWidth * CGFloat(model.currentState == .open ? 1 : 0))
+    }
+    return baseOffset + dragDirection * CGFloat(model.dragOffset)
   }
 
   private func createDragGesture(
@@ -509,6 +540,9 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     let horizontal = abs(value.translation.width)
     let vertical = abs(value.translation.height)
 
+    // Convert raw translation to "opening progress" (positive = toward open).
+    let openingTranslation = value.translation.width * dragDirection
+
     // Edge-only activation check
     if dragParams.shouldIgnoreDrag(isMenuOpen: isMenuOpen, startLocationX: value.startLocation.x) {
       isMenuDragging = false
@@ -529,8 +563,8 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // Ignore until dragging is confirmed
     guard isMenuDragging else { return }
 
-    // Closed state dragging left: not a menu gesture
-    if model.currentState == .closed && value.translation.width < 0 {
+    // Closed state dragging in the close direction: not a menu gesture
+    if model.currentState == .closed && openingTranslation < 0 {
       isMenuDragging = false
       withTransaction(Transaction(animation: nil)) {
         model.setDragOffset(0)
@@ -539,7 +573,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     }
 
     // Ignore dragging in the open direction when menu is already open
-    if model.currentState == .open && value.translation.width > 0 {
+    if model.currentState == .open && openingTranslation > 0 {
       return
     }
 
@@ -548,12 +582,12 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
     // Update drag offset (cancel animation for immediate tracking)
     withTransaction(Transaction(animation: nil)) {
-      model.setDragOffset(Float(value.translation.width))
+      model.setDragOffset(Float(openingTranslation))
     }
 
     // Threshold crossing haptic (50% of menu width, opening only)
     if configuration.hapticStyle != nil && model.currentState == .closed {
-      let progress = CGFloat(value.translation.width) / menuWidth
+      let progress = openingTranslation / menuWidth
       let pastThreshold = progress > 0.5
       if pastThreshold != model.hasPassedThreshold {
         model.hasPassedThreshold = pastThreshold
@@ -587,23 +621,27 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     isMenuDragging = false
     model.hasPassedThreshold = false
 
-    let velocityX = value.velocity.width
+    // Project both velocity and translation into the "opening" direction
+    // (positive = toward open) so logic is identical for both edges.
+    let openingVelocity = value.velocity.width * dragDirection
+    let openingTranslation = value.translation.width * dragDirection
     let startingState = model.currentState
 
-    // Current position of the menu edge
+    // Current position of the menu edge along the opening axis.
+    // 0 = fully closed, menuWidth = fully open.
     let currentPosition: CGFloat
     if startingState == .open {
-      currentPosition = menuWidth + CGFloat(value.translation.width)
+      currentPosition = menuWidth + openingTranslation
     } else {
-      currentPosition = CGFloat(value.translation.width)
+      currentPosition = openingTranslation
     }
 
     // Velocity-based snap: if flick is fast enough, decide by direction
     let shouldOpen: Bool
     let shouldClose: Bool
-    if abs(velocityX) > configuration.velocityThreshold {
-      shouldOpen = velocityX > 0
-      shouldClose = velocityX < 0
+    if abs(openingVelocity) > configuration.velocityThreshold {
+      shouldOpen = openingVelocity > 0
+      shouldClose = openingVelocity < 0
     } else {
       // Position-based fallback: 50% of menu width
       shouldOpen = currentPosition > menuWidth * 0.5
@@ -618,7 +656,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     // This ensures the spring animation starts at exactly the gesture's velocity
     let normalizedVelocity: Double
     if abs(remainingDistance) > 1 {
-      normalizedVelocity = velocityX / remainingDistance
+      normalizedVelocity = openingVelocity / remainingDistance
     } else {
       normalizedVelocity = 0
     }
@@ -655,7 +693,17 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
-    ZStack(alignment: .leading) {
+    // Menu offset target:
+    // - leading: closed = -menuWidth, open = 0           → calcOffset, clamp min(_, 0)
+    // - trailing: closed = +menuWidth, open = 0          → calcOffset + menuWidth, clamp max(_, 0)
+    let menuOffset: CGFloat = {
+      switch configuration.edge {
+      case .leading: return min(calcOffset, 0)
+      case .trailing: return max(calcOffset + menuWidthPoints, 0)
+      }
+    }()
+
+    ZStack(alignment: stackAlignment) {
       mainViewWithEffects(
         screenWidth: screenWidth,
         blur: styleParams.blur,
@@ -665,7 +713,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
 
       dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: 0)
 
-      sideMenuView(width: menuWidthPoints, offset: min(calcOffset, 0))
+      sideMenuView(width: menuWidthPoints, offset: menuOffset)
     }
   }
 
@@ -676,9 +724,39 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
-    // Clamp menu offset to prevent gap on leading edge during overdrag
-    sideMenuView(width: menuWidthPoints, offset: min(calcOffset, 0))
+    // For trailing, HStack order is reversed so the menu sits on the right
+    // and main on the left.
+    // calcOffset semantics:
+    // - leading: closed = -menuWidth, open = 0
+    // - trailing: closed = 0, open = -menuWidth
+    // Both edges shift menu and main by calcOffset in raw pixel direction.
+    switch configuration.edge {
+    case .leading:
+      sideMenuView(width: menuWidthPoints, offset: min(calcOffset, 0))
+      slideInOutMainStack(
+        screenWidth: screenWidth,
+        menuWidthPoints: menuWidthPoints,
+        styleParams: styleParams,
+        calcOffset: calcOffset
+      )
+    case .trailing:
+      slideInOutMainStack(
+        screenWidth: screenWidth,
+        menuWidthPoints: menuWidthPoints,
+        styleParams: styleParams,
+        calcOffset: calcOffset
+      )
+      sideMenuView(width: menuWidthPoints, offset: max(calcOffset, -menuWidthPoints))
+    }
+  }
 
+  @ViewBuilder
+  private func slideInOutMainStack(
+    screenWidth: CGFloat,
+    menuWidthPoints: CGFloat,
+    styleParams: StyleParams,
+    calcOffset: CGFloat
+  ) -> some View {
     ZStack {
       mainViewWithEffects(
         screenWidth: screenWidth,
@@ -698,9 +776,27 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     styleParams: StyleParams,
     calcOffset: CGFloat
   ) -> some View {
-    // Menu is underneath, fixed in place
-    // MainView slides to reveal the menu
-    ZStack(alignment: .leading) {
+    // Menu is fixed beneath; MainView slides to reveal it.
+    // Main offset target:
+    // - leading: closed = 0, open = +menuWidth   → calcOffset + menuWidth
+    // - trailing: closed = 0, open = -menuWidth  → calcOffset
+    let mainOffset: CGFloat = {
+      switch configuration.edge {
+      case .leading: return calcOffset + menuWidthPoints
+      case .trailing: return calcOffset
+      }
+    }()
+
+    // Menu scale anchors on the side facing the main view so the menu
+    // appears to grow out from beneath the main view as it slides.
+    let menuScaleAnchor: UnitPoint = {
+      switch configuration.edge {
+      case .leading: return .trailing
+      case .trailing: return .leading
+      }
+    }()
+
+    ZStack(alignment: stackAlignment) {
       // Background to prevent gaps when scaling
       if let backgroundColor = styleParams.backgroundColor {
         Color(uiColor: backgroundColor)
@@ -711,7 +807,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
       sideMenuView(width: menuWidthPoints, offset: 0)
         .scaleEffect(
           model.calculateMenuScale(minScale: styleParams.scale, menuWidth: menuWidthPoints),
-          anchor: .trailing
+          anchor: menuScaleAnchor
         )
 
       ZStack {
@@ -719,10 +815,10 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           screenWidth: screenWidth,
           blur: 0,
           scale: 1,
-          offset: calcOffset + menuWidthPoints
+          offset: mainOffset
         )
 
-        dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset + menuWidthPoints)
+        dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: mainOffset)
       }
     }
   }
@@ -741,10 +837,11 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
         offset: calcOffset,
         progress: model.calculateProgress(menuWidth: menuWidthPoints),
         isOpen: model.isOpen,
-        isDragging: isMenuDragging
+        isDragging: isMenuDragging,
+        edge: configuration.edge
       )
 
-      ZStack(alignment: .leading) {
+      ZStack(alignment: stackAlignment) {
         sideMenuLayout(context, AnyView(sideMenu.frame(width: menuWidthPoints)))
         mainViewLayout(context, AnyView(mainView.frame(width: screenWidth)))
         dimOverlay(dimValue: styleParams.dimValue, menuWidth: menuWidthPoints, offset: calcOffset)
@@ -813,45 +910,110 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   }
 }
 
-#Preview {
+// MARK: - Previews
 
-  @Previewable @State var model = SideMenuState()
+private struct SideMenuPreviewHost: View {
+  let style: MenuStyle
+  let edge: MenuEdge
+  let startsOpen: Bool
 
-  SideMenuView(
-    model: model,
-    configuration: .init(menuStyle: .slideOut(scale: 0.8, dimValue: 0.5, backgroundColor: .secondarySystemBackground))
-  ) {
-    List {
-      Section("Menu") {
-        Button("Home") { withAnimation { model.close() } }
-        Button("Settings") { withAnimation { model.close() } }
-        Button("Profile") { withAnimation { model.close() } }
+  @State private var model = SideMenuState()
+
+  init(style: MenuStyle, edge: MenuEdge, startsOpen: Bool = false) {
+    self.style = style
+    self.edge = edge
+    self.startsOpen = startsOpen
+  }
+
+  var body: some View {
+    SideMenuView(
+      model: model,
+      configuration: .init(menuStyle: style, edge: edge)
+    ) {
+      List {
+        Section("Menu") {
+          Button("Home") { withAnimation { model.close() } }
+          Button("Settings") { withAnimation { model.close() } }
+          Button("Profile") { withAnimation { model.close() } }
+        }
+      }
+    } mainView: {
+      NavigationStack {
+        ScrollView {
+          VStack(spacing: 12) {
+            ForEach(0..<20) { index in
+              Text("Item \(index + 1)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+          }
+          .padding()
+        }
+        .navigationTitle(edge == .leading ? "Leading" : "Trailing")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: edge == .leading ? .topBarLeading : .topBarTrailing) {
+            Button {
+              withAnimation { model.toggle() }
+            } label: {
+              Image(systemName: "line.3.horizontal")
+            }
+          }
+        }
       }
     }
-  } mainView: {
-    NavigationStack {
-      ScrollView {
-        VStack(spacing: 12) {
-          ForEach(0..<20) { index in
-            Text("Item \(index + 1)")
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding()
-              .background(Color(uiColor: .secondarySystemBackground))
-              .clipShape(RoundedRectangle(cornerRadius: 8))
-          }
-        }
-        .padding()
-      }
-      .navigationTitle("Home")
-      .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
-          Button {
-            withAnimation { model.toggle() }
-          } label: {
-            Image(systemName: "line.3.horizontal")
-          }
-        }
-      }
+    .onAppear {
+      if startsOpen { model.open() }
     }
   }
+}
+
+#Preview("slideOut · Leading") {
+  SideMenuPreviewHost(
+    style: .slideOut(scale: 0.8, dimValue: 0.5, backgroundColor: .secondarySystemBackground),
+    edge: .leading,
+    startsOpen: true
+  )
+}
+
+#Preview("slideOut · Trailing") {
+  SideMenuPreviewHost(
+    style: .slideOut(scale: 0.8, dimValue: 0.5, backgroundColor: .secondarySystemBackground),
+    edge: .trailing,
+    startsOpen: true
+  )
+}
+
+#Preview("slideInOut · Leading") {
+  SideMenuPreviewHost(style: .slideInOut(dimValue: 0.3), edge: .leading, startsOpen: true)
+}
+
+#Preview("slideInOut · Trailing") {
+  SideMenuPreviewHost(style: .slideInOut(dimValue: 0.3), edge: .trailing, startsOpen: true)
+}
+
+#Preview("slideInOver · Leading") {
+  SideMenuPreviewHost(
+    style: .slideInOver(blur: 3, scale: 0.95, dimValue: 0.3),
+    edge: .leading,
+    startsOpen: true
+  )
+}
+
+#Preview("slideInOver · Trailing") {
+  SideMenuPreviewHost(
+    style: .slideInOver(blur: 3, scale: 0.95, dimValue: 0.3),
+    edge: .trailing,
+    startsOpen: true
+  )
+}
+
+#Preview("Closed · Leading") {
+  SideMenuPreviewHost(style: .slideInOut(), edge: .leading)
+}
+
+#Preview("Closed · Trailing") {
+  SideMenuPreviewHost(style: .slideInOut(), edge: .trailing)
 }

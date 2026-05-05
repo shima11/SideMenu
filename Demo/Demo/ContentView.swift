@@ -52,7 +52,8 @@ struct ContentView: View {
         menuStyle: menuStyle,
         menuAnimation: configuration.menuAnimation,
         dragActivation: dragActivation,
-        hapticStyle: configuration.hapticStyle
+        hapticStyle: configuration.hapticStyle,
+        edge: configuration.edge
       )
     ) {
       // Side Menu Content
@@ -126,7 +127,7 @@ struct ContentView: View {
       .navigationTitle(selectedRoom)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: configuration.edge == .leading ? .topBarLeading : .topBarTrailing) {
           Button {
             withAnimation(configuration.menuAnimation) {
               menuState.toggle()
@@ -136,7 +137,7 @@ struct ContentView: View {
           }
         }
 
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: configuration.edge == .leading ? .topBarTrailing : .topBarLeading) {
           Button {
             showSettings = true
           } label: {
@@ -222,6 +223,11 @@ struct ContentView: View {
         }
 
         Section("Interaction") {
+          Picker("Edge", selection: $configuration.edge) {
+            Text("Leading").tag(MenuEdge.leading)
+            Text("Trailing").tag(MenuEdge.trailing)
+          }
+
           Picker("Drag Activation", selection: $configuration.dragActivation) {
             Text("Full Screen").tag(MenuDragActivation.full())
             Text("Edge Only").tag(MenuDragActivation.edge())
