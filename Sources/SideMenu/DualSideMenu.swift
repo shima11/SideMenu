@@ -200,6 +200,7 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
   // MARK: - Private Properties
 
   @AccessibilityFocusState private var focusTarget: FocusTarget?
+  @Environment(\.scenePhase) private var scenePhase
   @State private var isMenuDragging = false
   @State private var dragSide: MenuEdge?
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
@@ -388,6 +389,15 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
     }
     .onAppear { updateHapticGenerator() }
     .onChange(of: configuration.hapticStyle) { _, _ in updateHapticGenerator() }
+    .onChange(of: scenePhase) { _, newPhase in
+      // System gestures (e.g. horizontal swipe on the home indicator to switch
+      // apps) can cancel an in-flight DragGesture without firing onEnded,
+      // leaving `isMenuDragging`, `dragSide`, and `dragOffset` stuck. When the
+      // scene leaves .active, force-cancel any in-flight drag.
+      if newPhase != .active {
+        cancelInFlightDrag()
+      }
+    }
     .onDisappear {
       hapticGenerator = nil
       lightHapticGenerator = nil
@@ -397,6 +407,14 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
   private func closeMenuWithAnimation() {
     guard model.isOpen else { return }
     withAnimation(configuration.menuAnimation) { model.close() }
+  }
+
+  private func cancelInFlightDrag() {
+    guard isMenuDragging || dragSide != nil || model.dragOffset != 0 else { return }
+    isMenuDragging = false
+    dragSide = nil
+    model.hasPassedThreshold = false
+    model.resetDragOffset()
   }
 
   private func updateHapticGenerator() {

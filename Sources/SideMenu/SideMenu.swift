@@ -266,6 +266,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   // MARK: - Private Properties
 
   @AccessibilityFocusState private var focusTarget: FocusTarget?
+  @Environment(\.scenePhase) private var scenePhase
   @State private var isMenuDragging = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
@@ -390,10 +391,26 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     .onChange(of: configuration.hapticStyle) { _, _ in
       updateHapticGenerator()
     }
+    .onChange(of: scenePhase) { _, newPhase in
+      // System gestures (e.g. horizontal swipe on the home indicator to switch
+      // apps) can cancel an in-flight DragGesture without firing onEnded,
+      // leaving `isMenuDragging` and `dragOffset` stuck. When the scene leaves
+      // .active, force-cancel any in-flight drag so we return to a clean state.
+      if newPhase != .active {
+        cancelInFlightDrag()
+      }
+    }
     .onDisappear {
       hapticGenerator = nil
       lightHapticGenerator = nil
     }
+  }
+
+  private func cancelInFlightDrag() {
+    guard isMenuDragging || model.dragOffset != 0 else { return }
+    isMenuDragging = false
+    model.hasPassedThreshold = false
+    model.resetDragOffset()
   }
 
   private func closeMenuWithAnimation() {
