@@ -1,0 +1,361 @@
+
+import SwiftUI
+import SideMenu
+
+struct DualContentView: View {
+  @State private var menuState = DualSideMenuState()
+  @State private var configuration = DualSideMenuConfiguration()
+  @State private var showSettings = false
+  @State private var showDetail = false
+  @State private var selectedRoom: String = "Room 1"
+  @State private var searchText: String = ""
+
+  // Style-specific parameters
+  @State private var blur: Double = 2
+  @State private var scale: Double = 1
+  @State private var dimValue: Double = 0.2
+
+  // Drag activation parameters
+  @State private var edgeWidth: Double = 24
+  @State private var startThreshold: Double = 20
+  @State private var openCloseThreshold: Double = 50
+
+  private let rooms = ["Room 1", "Room 2", "Room 3", "Room 4", "Room 5"]
+
+  private var menuStyle: SideMenu.MenuStyle {
+    switch configuration.menuStyle {
+    case .slideInOver:
+      return .slideInOver(blur: blur, scale: scale, dimValue: dimValue)
+    case .slideInOut:
+      return .slideInOut(dimValue: dimValue)
+    case .slideOut:
+      return .slideOut(scale: scale, dimValue: dimValue, backgroundColor: .secondarySystemBackground)
+    case .custom:
+      return configuration.menuStyle
+    }
+  }
+
+  private var dragActivation: MenuDragActivation {
+    switch configuration.dragActivation {
+    case .edge:
+      return .edge(edgeWidth: edgeWidth, startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
+    case .full:
+      return .full(startThreshold: startThreshold, openCloseThreshold: openCloseThreshold)
+    }
+  }
+
+  var body: some View {
+    DualSideMenuView(
+      model: menuState,
+      configuration: DualSideMenuConfiguration(
+        menuWidth: configuration.menuWidth,
+        menuStyle: menuStyle,
+        menuAnimation: configuration.menuAnimation,
+        dragActivation: dragActivation,
+        hapticStyle: configuration.hapticStyle
+      )
+    ) {
+      leadingMenuContent
+    } trailingMenu: {
+      trailingMenuContent
+    } mainView: {
+      mainContent
+    }
+    .sheet(isPresented: $showSettings) { settingsView }
+    .sheet(isPresented: $showDetail) { detailView }
+  }
+
+  // MARK: - Leading menu (same as single demo)
+
+  private var leadingMenuContent: some View {
+    NavigationStack {
+      List {
+        Section("Rooms") {
+          ForEach(rooms, id: \.self) { room in
+            Button(room) {
+              withAnimation(configuration.menuAnimation) {
+                selectedRoom = room
+                menuState.close()
+              }
+            }
+          }
+        }
+      }
+      .scrollContentBackground(.hidden)
+      .navigationTitle("Menu")
+    }
+  }
+
+  // MARK: - Main view (same as single demo)
+
+  private var mainContent: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(spacing: 12) {
+          TextField("Search...", text: $searchText)
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal, 16)
+
+          ForEach(0..<20) { index in
+            Button {
+              showDetail = true
+            } label: {
+              HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text("Item \(index + 1)")
+                    .font(.headline)
+                  Text("Tap to see details")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                  .foregroundStyle(.secondary)
+              }
+              .padding()
+              .background(Color(uiColor: .secondarySystemBackground))
+              .clipShape(RoundedRectangle(cornerRadius: 12))
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+          }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+      }
+      .navigationTitle(selectedRoom)
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            withAnimation(configuration.menuAnimation) {
+              menuState.toggle(.leading)
+            }
+          } label: {
+            Image(systemName: "line.3.horizontal")
+          }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            showSettings = true
+          } label: {
+            Image(systemName: "gearshape")
+          }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            withAnimation(configuration.menuAnimation) {
+              menuState.toggle(.trailing)
+            }
+          } label: {
+            Image(systemName: "bell")
+          }
+        }
+      }
+    }
+  }
+
+  // MARK: - Trailing — a new screen added for dual mode
+
+  private var trailingMenuContent: some View {
+    NavigationStack {
+      List {
+        Section("New") {
+          ForEach(0..<3) { index in
+            HStack(spacing: 12) {
+              Image(systemName: ["bell.badge.fill", "person.crop.circle.badge.checkmark", "tray.full"][index])
+                .font(.title2)
+                .foregroundStyle(.tint)
+                .frame(width: 32)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(["You have a new message", "Profile updated", "Inbox synced"][index])
+                  .font(.subheadline)
+                Text("\(index + 1) min ago")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+            .padding(.vertical, 4)
+          }
+        }
+
+        Section("Earlier") {
+          ForEach(0..<5) { index in
+            HStack(spacing: 12) {
+              Image(systemName: "circle.fill")
+                .font(.system(size: 8))
+                .foregroundStyle(.secondary)
+                .frame(width: 32)
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Activity item \(index + 1)")
+                  .font(.subheadline)
+                Text("\(index + 2)h ago")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+            .padding(.vertical, 4)
+          }
+        }
+      }
+      .scrollContentBackground(.hidden)
+      .navigationTitle("Activity")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            withAnimation(configuration.menuAnimation) {
+              menuState.close()
+            }
+          } label: {
+            Image(systemName: "xmark")
+          }
+        }
+      }
+    }
+  }
+
+  // MARK: - Detail sheet
+
+  private var detailView: some View {
+    NavigationStack {
+      VStack {
+        Text("Detail View")
+          .font(.title)
+        Text("This is a demo detail view")
+          .foregroundStyle(.secondary)
+      }
+      .navigationTitle("Details")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Close") { showDetail = false }
+        }
+      }
+    }
+  }
+
+  // MARK: - Settings
+
+  private var scaleSlider: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text("Scale")
+        Spacer()
+        Text(scale, format: .number.precision(.fractionLength(2)))
+          .foregroundStyle(.secondary)
+      }
+      Slider(value: $scale, in: 0.8...1.0, step: 0.02)
+    }
+  }
+
+  private var settingsView: some View {
+    NavigationStack {
+      List {
+        Section("Menu Style") {
+          Picker("Style", selection: $configuration.menuStyle) {
+            Text("Slide In Over").tag(MenuStyle.slideInOver())
+            Text("Slide In Out").tag(MenuStyle.slideInOut())
+            Text("Slide Out").tag(MenuStyle.slideOut())
+          }
+
+          if case .slideInOver = configuration.menuStyle {
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Blur Effect")
+                Spacer()
+                Text(blur, format: .number.precision(.fractionLength(1)))
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $blur, in: 0...10, step: 0.5)
+            }
+          }
+
+          if case .slideInOver = configuration.menuStyle {
+            scaleSlider
+          } else if case .slideOut = configuration.menuStyle {
+            scaleSlider
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Dim Opacity")
+              Spacer()
+              Text(dimValue, format: .number.precision(.fractionLength(2)))
+                .foregroundStyle(.secondary)
+            }
+            Slider(value: $dimValue, in: 0...0.6, step: 0.05)
+          }
+        }
+
+        Section("Interaction") {
+          Picker("Drag Activation", selection: $configuration.dragActivation) {
+            Text("Full Screen").tag(MenuDragActivation.full())
+            Text("Edge Only").tag(MenuDragActivation.edge())
+          }
+
+          if case .edge = configuration.dragActivation {
+            VStack(alignment: .leading, spacing: 8) {
+              HStack {
+                Text("Edge Width")
+                Spacer()
+                Text("\(Int(edgeWidth))pt")
+                  .foregroundStyle(.secondary)
+              }
+              Slider(value: $edgeWidth, in: 10...80, step: 2)
+            }
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Start Threshold")
+              Spacer()
+              Text("\(Int(startThreshold))pt")
+                .foregroundStyle(.secondary)
+            }
+            Slider(value: $startThreshold, in: 0...30, step: 1)
+          }
+
+          Picker("Haptic Feedback", selection: $configuration.hapticStyle) {
+            Text("None").tag(nil as UIImpactFeedbackGenerator.FeedbackStyle?)
+            Text("Light").tag(UIImpactFeedbackGenerator.FeedbackStyle.light as UIImpactFeedbackGenerator.FeedbackStyle?)
+            Text("Medium").tag(UIImpactFeedbackGenerator.FeedbackStyle.medium as UIImpactFeedbackGenerator.FeedbackStyle?)
+            Text("Heavy").tag(UIImpactFeedbackGenerator.FeedbackStyle.heavy as UIImpactFeedbackGenerator.FeedbackStyle?)
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Menu Width")
+              Spacer()
+              Text("\(Int(configuration.menuWidth * 100))%")
+                .foregroundStyle(.secondary)
+            }
+            Slider(value: $configuration.menuWidth.asDualDouble(), in: 0.5...0.9, step: 0.05)
+          }
+        }
+      }
+      .navigationTitle("Dual Settings")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Done") { showSettings = false }
+        }
+      }
+    }
+  }
+}
+
+private extension Binding where Value == CGFloat {
+  func asDualDouble() -> Binding<Double> {
+    Binding<Double>(
+      get: { Double(wrappedValue) },
+      set: { wrappedValue = CGFloat($0) }
+    )
+  }
+}
+
+#Preview {
+  DualContentView()
+}
