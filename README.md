@@ -11,6 +11,7 @@ A highly customizable, gesture-driven side menu component for SwiftUI with full 
 ## Features
 
 - **Fluid Gesture** - Velocity-based spring animations with rubber band effect at menu edges
+- **Both Edges** - Mount on the leading or trailing edge, or use `DualSideMenuView` for both at once
 - **3 Presentation Styles** - Slide-in-over, slide-in-out, and slide-out (Threads-like) + custom layout
 - **Gesture Control** - Full-screen or edge-only drag activation with configurable sensitivity
 - **Haptic Feedback** - Configurable haptic feedback on open/close and rubber band limit
@@ -174,6 +175,19 @@ SideMenuView(model: menuState, configuration: config) {
 | `velocityThreshold` | `CGFloat` | `300` | Minimum flick velocity (pt/s) to trigger open/close |
 | `rubberBandLimit` | `CGFloat` | `40` | Maximum rubber band displacement in points |
 
+### Edge
+
+Choose which screen edge the menu appears from. Drag direction, layout, and edge-only activation zone all flip automatically.
+
+```swift
+SideMenuConfiguration(edge: .trailing)
+```
+
+| Value | Description |
+|-------|-------------|
+| `.leading` | Menu appears from the leading edge (left in LTR, right in RTL). Default. |
+| `.trailing` | Menu appears from the trailing edge (right in LTR, left in RTL). |
+
 ### Drag Activation
 
 Control how users can open the menu with gestures.
@@ -208,6 +222,78 @@ withAnimation { menuState.toggle() }
 // Check if menu is open
 if menuState.isOpen { /* ... */ }
 ```
+
+## Dual Side Menu
+
+`DualSideMenuView` mounts menus on **both** edges simultaneously with type-level mutual exclusion: at most one side can be open at a time, enforced by the state enum itself.
+
+```swift
+import SwiftUI
+import SideMenu
+
+struct ContentView: View {
+    @State private var menuState = DualSideMenuState()
+
+    var body: some View {
+        DualSideMenuView(model: menuState) {
+            // Leading menu
+            LeadingMenu()
+        } trailingMenu: {
+            // Trailing menu
+            TrailingMenu()
+        } mainView: {
+            NavigationStack {
+                MainContent()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Menu", systemImage: "line.3.horizontal") {
+                                withAnimation { menuState.toggle(.leading) }
+                            }
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Activity", systemImage: "bell") {
+                                withAnimation { menuState.toggle(.trailing) }
+                            }
+                        }
+                    }
+            }
+        }
+    }
+}
+```
+
+### State
+
+`DualSideMenuState.currentState` is `case closed` or `case open(MenuEdge)`. Opening one side automatically replaces any other open side — both menus can never be open at the same time.
+
+```swift
+menuState.openLeading()       // .open(.leading)
+menuState.openTrailing()      // .open(.trailing) — closes leading if it was open
+menuState.toggle(.leading)    // toggle a specific side
+menuState.close()             // .closed
+menuState.isOpen              // any side open?
+menuState.openEdge            // MenuEdge? — which side, if any
+```
+
+### Configuration
+
+`DualSideMenuConfiguration` mirrors `SideMenuConfiguration` but omits the `edge` field (both edges are always rendered).
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `menuWidth` | `CGFloat` | `0.8` | Width of each menu as a fraction of screen (shared by both sides) |
+| `menuStyle` | `MenuStyle` | `.slideInOut()` | Presentation style. `.custom` is **not** supported and falls back to `.slideInOver` |
+| `menuAnimation` | `Animation` | `.spring(duration: 0.4, bounce: 0.0)` | Animation curve for transitions |
+| `dragActivation` | `MenuDragActivation` | `.full()` | Drag activation area. In `.edge` mode, leading edge opens leading and trailing edge opens trailing |
+| `hapticStyle` | `FeedbackStyle?` | `.medium` | Haptic feedback style (`nil` to disable) |
+| `velocityThreshold` | `CGFloat` | `300` | Minimum flick velocity (pt/s) to trigger open/close |
+
+### Gesture Behavior
+
+- From `.closed`: drag right opens leading, drag left opens trailing. In `.edge` mode the start zone determines the side.
+- From `.open(.leading)`: only the closing direction is accepted.
+- From `.open(.trailing)`: only the closing direction is accepted.
+- Sides cannot be swapped within a single drag — release and re-drag to switch.
 
 ## Accessibility
 
