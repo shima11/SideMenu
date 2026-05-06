@@ -10,32 +10,19 @@ struct DemoApp: App {
   }
 }
 
-struct RootView: View {
-  enum Mode: String, CaseIterable, Identifiable {
-    case single = "Single"
-    case dual = "Dual"
-    var id: Self { self }
-  }
+enum DemoMode: String, CaseIterable, Identifiable {
+  case single = "Single"
+  case dual = "Dual"
+  var id: Self { self }
+}
 
-  @State private var mode: Mode = .single
+struct RootView: View {
+  @State private var mode: DemoMode = .single
 
   var body: some View {
-    ZStack {
-      switch mode {
-      case .single: ContentView()
-      case .dual: DualContentView()
-      }
-    }
-    .safeAreaInset(edge: .bottom) {
-      Picker("Mode", selection: $mode) {
-        ForEach(Mode.allCases) { mode in
-          Text(mode.rawValue).tag(mode)
-        }
-      }
-      .pickerStyle(.segmented)
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
-      .background(.ultraThinMaterial)
+    switch mode {
+    case .single: ContentView(mode: $mode)
+    case .dual: DualContentView(mode: $mode)
     }
   }
 }

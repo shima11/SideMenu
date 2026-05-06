@@ -3,12 +3,18 @@ import SwiftUI
 import SideMenu
 
 struct ContentView: View {
+  @Binding var mode: DemoMode
+
   @State private var menuState = SideMenuState()
   @State private var selectedRoom: String = "Room 1"
   @State private var configuration = SideMenuConfiguration()
   @State private var showDetail = false
   @State private var showSettings = false
   @State private var searchText: String = ""
+
+  init(mode: Binding<DemoMode> = .constant(.single)) {
+    self._mode = mode
+  }
   
   // Style-specific parameters
   @State private var blur: Double = 2
@@ -137,6 +143,10 @@ struct ContentView: View {
           }
         }
 
+        ToolbarItem(placement: .principal) {
+          modePicker
+        }
+
         ToolbarItem(placement: configuration.edge == .leading ? .topBarTrailing : .topBarLeading) {
           Button {
             showSettings = true
@@ -146,6 +156,16 @@ struct ContentView: View {
         }
       }
     }
+  }
+
+  private var modePicker: some View {
+    Picker("Mode", selection: $mode) {
+      ForEach(DemoMode.allCases) { mode in
+        Text(mode.rawValue).tag(mode)
+      }
+    }
+    .pickerStyle(.segmented)
+    .frame(width: 140)
   }
 
   private var detailView: some View {

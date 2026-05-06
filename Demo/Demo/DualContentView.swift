@@ -3,12 +3,18 @@ import SwiftUI
 import SideMenu
 
 struct DualContentView: View {
+  @Binding var mode: DemoMode
+
   @State private var menuState = DualSideMenuState()
   @State private var configuration = DualSideMenuConfiguration()
   @State private var showSettings = false
   @State private var showDetail = false
   @State private var selectedRoom: String = "Room 1"
   @State private var searchText: String = ""
+
+  init(mode: Binding<DemoMode> = .constant(.dual)) {
+    self._mode = mode
+  }
 
   // Style-specific parameters
   @State private var blur: Double = 2
@@ -136,6 +142,10 @@ struct DualContentView: View {
           }
         }
 
+        ToolbarItem(placement: .principal) {
+          modePicker
+        }
+
         ToolbarItem(placement: .topBarTrailing) {
           Button {
             showSettings = true
@@ -215,6 +225,18 @@ struct DualContentView: View {
         }
       }
     }
+  }
+
+  // MARK: - Mode picker
+
+  private var modePicker: some View {
+    Picker("Mode", selection: $mode) {
+      ForEach(DemoMode.allCases) { mode in
+        Text(mode.rawValue).tag(mode)
+      }
+    }
+    .pickerStyle(.segmented)
+    .frame(width: 140)
   }
 
   // MARK: - Detail sheet
