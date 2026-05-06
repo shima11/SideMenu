@@ -110,37 +110,6 @@ public final class DualSideMenuState {
   public func calculateProgress(menuWidth: CGFloat) -> CGFloat {
     abs(calculateSignedProgress(menuWidth: menuWidth))
   }
-
-  /// Calculates the scale effect applied to the main view.
-  ///
-  /// Mirrors `SideMenuState.calculateScale` semantics — main shrinks toward
-  /// `minScale` as either side opens.
-  public func calculateMainScale(minScale: CGFloat) -> CGFloat {
-    let progress = calculateProgress(menuWidth: 1)  // already in [0,1]
-    return 1 - (1 - minScale) * progress
-  }
-
-  /// Calculates the blur radius applied to the main view.
-  public func calculateMainBlur(maxValue: CGFloat) -> CGFloat {
-    let progress = calculateProgress(menuWidth: 1)
-    return maxValue * progress
-  }
-
-  /// Calculates the scale of one side menu (only the open side scales up).
-  ///
-  /// - Parameters:
-  ///   - edge: which menu to compute the scale for.
-  ///   - minScale: scale value when that side is fully closed/hidden.
-  /// - Returns: scale value where `minScale` = that side hidden, `1` = visible.
-  public func calculateMenuScale(edge: MenuEdge, minScale: CGFloat) -> CGFloat {
-    let signed = calculateSignedProgress(menuWidth: 1)
-    let sideProgress: CGFloat
-    switch edge {
-    case .leading: sideProgress = max(signed, 0)   // 0..1
-    case .trailing: sideProgress = max(-signed, 0)
-    }
-    return minScale + (1 - minScale) * sideProgress
-  }
 }
 
 // MARK: - Configuration
@@ -176,17 +145,13 @@ public struct DualSideMenuConfiguration: Equatable, Sendable {
   /// Minimum flick velocity (pt/s) to trigger open/close regardless of distance.
   public var velocityThreshold: CGFloat
 
-  /// Maximum visual displacement for rubber band effect at menu edges.
-  public var rubberBandLimit: CGFloat
-
   public init(
     menuWidth: CGFloat = 0.8,
     menuStyle: MenuStyle = .slideInOut(),
     menuAnimation: Animation = .spring(duration: 0.4, bounce: 0.0),
     dragActivation: MenuDragActivation = .full(),
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
-    velocityThreshold: CGFloat = 300,
-    rubberBandLimit: CGFloat = 40
+    velocityThreshold: CGFloat = 300
   ) {
     self.menuWidth = min(max(menuWidth, 0), 1)
     self.menuStyle = menuStyle
@@ -194,7 +159,6 @@ public struct DualSideMenuConfiguration: Equatable, Sendable {
     self.dragActivation = dragActivation
     self.hapticStyle = hapticStyle
     self.velocityThreshold = max(velocityThreshold, 0)
-    self.rubberBandLimit = max(rubberBandLimit, 0)
   }
 }
 
@@ -341,8 +305,12 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
         backgroundColor: bg
       )
     case .custom(let dim, _, _):
-      // Custom layouts cannot express a dual-edge layout — fall back to
-      // slideInOver as a reasonable default.
+      // Custom layouts target a single-edge context and cannot represent a
+      // dual-edge layout. Surface this loudly in debug builds so callers
+      // notice; in release we fall back to slideInOver instead of crashing.
+      assertionFailure(
+        "DualSideMenuView does not support MenuStyle.custom. Falling back to .slideInOver."
+      )
       return StyleParams(
         kind: .slideInOver,
         blur: 0,
@@ -513,6 +481,7 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
         .offset(x: leadingShift)
         .accessibilityFocused($focusTarget, equals: .leading)
         .accessibilityHidden(model.openEdge != .leading)
+        .accessibilityAddTraits(model.openEdge == .leading ? .isModal : [])
 
       // Trailing menu — anchored to trailing edge, off-screen right when closed.
       trailingMenu
@@ -521,6 +490,7 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
         .offset(x: trailingShift)
         .accessibilityFocused($focusTarget, equals: .trailing)
         .accessibilityHidden(model.openEdge != .trailing)
+        .accessibilityAddTraits(model.openEdge == .trailing ? .isModal : [])
 
       // Main + dim — slides together with the menus.
       mainView
@@ -551,6 +521,11 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
     let signed = model.calculateSignedProgress(menuWidth: menuWidthPoints)
     let absProgress = abs(signed)
 
+    // Each menu scales up only when its own side opens.
+    // signed > 0 → leading opening, signed < 0 → trailing opening.
+    let leadingMenuScale = styleParams.scale + (1 - styleParams.scale) * max(signed, 0)
+    let trailingMenuScale = styleParams.scale + (1 - styleParams.scale) * max(-signed, 0)
+
     ZStack {
       // Optional background panels behind each side
       if let bg = styleParams.backgroundColor {
@@ -564,17 +539,11 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
 
       // Leading menu fixed at leading edge with scale anchored to its trailing side
       menuContainer(view: leadingMenu, edge: .leading, width: menuWidthPoints, offset: 0)
-        .scaleEffect(
-          model.calculateMenuScale(edge: .leading, minScale: styleParams.scale),
-          anchor: .trailing
-        )
+        .scaleEffect(leadingMenuScale, anchor: .trailing)
 
       // Trailing menu fixed at trailing edge with scale anchored to its leading side
       menuContainer(view: trailingMenu, edge: .trailing, width: menuWidthPoints, offset: 0)
-        .scaleEffect(
-          model.calculateMenuScale(edge: .trailing, minScale: styleParams.scale),
-          anchor: .leading
-        )
+        .scaleEffect(trailingMenuScale, anchor: .leading)
 
       // Main + dim slide together
       ZStack {
