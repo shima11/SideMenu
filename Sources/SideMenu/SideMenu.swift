@@ -270,7 +270,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   @State private var isMenuDragging = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
-  private let dragEnabled: @MainActor @Sendable () -> Bool
+  private let dragEnabled: () -> Bool
 
   private enum FocusTarget: Hashable {
     case menu
@@ -311,7 +311,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   public init(
     model: SideMenuState = .init(),
     configuration: SideMenuConfiguration = .init(),
-    dragEnabled: @escaping @MainActor @Sendable () -> Bool = { true },
+    dragEnabled: @escaping () -> Bool = { true },
     @ViewBuilder sideMenu: () -> SideMenu,
     @ViewBuilder mainView: () -> MainView
   ) {
