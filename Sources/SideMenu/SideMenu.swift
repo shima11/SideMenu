@@ -270,6 +270,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   @State private var isMenuDragging = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
+  @Binding private var dragEnabled: Bool
 
   private enum FocusTarget: Hashable {
     case menu
@@ -303,11 +304,14 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   /// - Parameters:
   ///   - model: The state model managing the menu. Default is a new instance.
   ///   - configuration: Configuration options for appearance and behavior. Default uses standard values.
+  ///   - dragEnabled: Binding controlling whether drag gestures are active. Set to `false` to suppress
+  ///     the drag (e.g. while a child view is tracking its own gesture). Default is `.constant(true)`.
   ///   - sideMenu: A view builder for the side menu content.
   ///   - mainView: A view builder for the main content.
-  @inlinable public init(
+  public init(
     model: SideMenuState = .init(),
     configuration: SideMenuConfiguration = .init(),
+    dragEnabled: Binding<Bool> = .constant(true),
     @ViewBuilder sideMenu: () -> SideMenu,
     @ViewBuilder mainView: () -> MainView
   ) {
@@ -315,6 +319,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     self.sideMenu = sideMenu()
     self.mainView = mainView()
     self.configuration = configuration
+    self._dragEnabled = dragEnabled
   }
 
   // MARK: - Body
@@ -369,7 +374,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .simultaneousGesture(
       createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams),
-      including: (!isMenuOpen && !dragParams.isEdgeOnly) ? .all : .none
+      including: (!isMenuOpen && !dragParams.isEdgeOnly && dragEnabled) ? .all : .none
     )
     .overlay(alignment: stackAlignment) {
       if dragParams.isEdgeOnly && !isMenuOpen {
@@ -377,7 +382,10 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
           .frame(width: dragParams.edgeWidth)
           .frame(maxHeight: .infinity)
           .contentShape(Rectangle())
-          .gesture(createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams))
+          .gesture(
+            createDragGesture(menuWidth: menuWidthPoints, dragParams: dragParams),
+            including: dragEnabled ? .all : .none
+          )
       }
     }
     .accessibilityAction(.escape, closeMenuWithAnimation)
