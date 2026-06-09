@@ -144,59 +144,21 @@ public enum MenuEdge: Equatable, Hashable, Sendable {
 ///   hapticStyle: .medium
 /// )
 /// ```
-public struct SideMenuConfiguration: Equatable, Sendable {
+public struct SideMenuConfiguration {
 
-  /// Width of the menu as a fraction of screen width (0.0 to 1.0).
-  ///
-  /// Values outside this range are automatically clamped. Default is 0.8 (80% of screen).
   public var menuWidth: CGFloat
-
-  /// Visual presentation style of the menu.
-  ///
-  /// Default is `.slideInOut()`.
   public var menuStyle: MenuStyle
-
-  /// Animation curve used for menu transitions.
-  ///
-  /// Default is `.spring(duration: 0.4, bounce: 0.0)` for physically-based motion.
   public var menuAnimation: Animation
-
-  /// Controls which screen area can initiate a drag to open the menu.
-  ///
-  /// Default is `.full()`.
   public var dragActivation: MenuDragActivation
-
-  /// The style of impact haptic feedback when opening or closing the menu via gesture.
-  ///
-  /// Set to `nil` to disable haptic feedback. Default is `.medium`.
   public var hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle?
-
-  /// Edge of the screen from which the menu appears.
-  ///
-  /// Default is `.leading`.
   public var edge: MenuEdge
-
-  /// Minimum flick velocity (pt/s) to trigger open/close regardless of distance.
-  ///
-  /// Default is 300.
   public var velocityThreshold: CGFloat
-
-  /// Maximum visual displacement for rubber band effect at menu edges.
-  ///
-  /// Default is 40.
   public var rubberBandLimit: CGFloat
 
-  /// Creates a new side menu configuration.
-  ///
-  /// - Parameters:
-  ///   - menuWidth: Width of the menu as a fraction of screen width (0.0 to 1.0). Default is 0.8.
-  ///   - menuStyle: Visual presentation style. Default is `.slideOut()`.
-  ///   - menuAnimation: Animation curve for transitions. Default is `.spring(duration: 0.4, bounce: 0.0)`.
-  ///   - dragActivation: Which screen area responds to drag gestures. Default is `.full()`.
-  ///   - hapticStyle: The style of impact haptic feedback. Set to `nil` to disable. Default is `.medium`.
-  ///   - edge: Which screen edge the menu appears from. Default is `.leading`.
-  ///   - velocityThreshold: Minimum flick velocity to trigger open/close. Default is 300.
-  ///   - rubberBandLimit: Maximum rubber band displacement in points. Default is 40.
+  /// Evaluated synchronously when a drag gesture starts.
+  /// Return `false` to suppress the drag. Default always returns `true`.
+  public var dragEnabled: () -> Bool
+
   public init(
     menuWidth: CGFloat = 0.8,
     menuStyle: MenuStyle = .slideInOut(),
@@ -205,7 +167,8 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle? = .medium,
     edge: MenuEdge = .leading,
     velocityThreshold: CGFloat = 300,
-    rubberBandLimit: CGFloat = 40
+    rubberBandLimit: CGFloat = 40,
+    dragEnabled: @escaping () -> Bool = { true }
   ) {
     self.menuWidth = min(max(menuWidth, 0), 1)
     self.menuStyle = menuStyle
@@ -215,6 +178,7 @@ public struct SideMenuConfiguration: Equatable, Sendable {
     self.edge = edge
     self.velocityThreshold = max(velocityThreshold, 0)
     self.rubberBandLimit = max(rubberBandLimit, 0)
+    self.dragEnabled = dragEnabled
   }
 }
 
@@ -270,7 +234,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   @State private var isMenuDragging = false
   @State private var hapticGenerator: UIImpactFeedbackGenerator?
   @State private var lightHapticGenerator: UIImpactFeedbackGenerator?
-  private let dragEnabled: () -> Bool
 
   private enum FocusTarget: Hashable {
     case menu
@@ -304,14 +267,11 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
   /// - Parameters:
   ///   - model: The state model managing the menu. Default is a new instance.
   ///   - configuration: Configuration options for appearance and behavior. Default uses standard values.
-  ///   - dragEnabled: Closure evaluated synchronously when a drag starts.
-  ///     Return `false` to suppress the drag. Evaluated on the main actor. Default always returns `true`.
   ///   - sideMenu: A view builder for the side menu content.
   ///   - mainView: A view builder for the main content.
   public init(
     model: SideMenuState = .init(),
     configuration: SideMenuConfiguration = .init(),
-    dragEnabled: @escaping () -> Bool = { true },
     @ViewBuilder sideMenu: () -> SideMenu,
     @ViewBuilder mainView: () -> MainView
   ) {
@@ -319,7 +279,6 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     self.sideMenu = sideMenu()
     self.mainView = mainView()
     self.configuration = configuration
-    self.dragEnabled = dragEnabled
   }
 
   // MARK: - Body
@@ -560,7 +519,7 @@ public struct SideMenuView<SideMenu : View, MainView : View> : View {
     dragParams: DragParams
   ) {
     // Synchronous check: allows callers to suppress drag without a rendering pass.
-    guard dragEnabled() else {
+    guard configuration.dragEnabled() else {
       isMenuDragging = false
       return
     }
