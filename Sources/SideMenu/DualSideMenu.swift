@@ -214,7 +214,7 @@ public struct DualSideMenuView<LeadingMenu: View, TrailingMenu: View, MainView: 
 
   // MARK: - Initialization
 
-  @inlinable public init(
+  public init(
     model: DualSideMenuState = .init(),
     configuration: DualSideMenuConfiguration = .init(),
     @ViewBuilder leadingMenu: () -> LeadingMenu,
